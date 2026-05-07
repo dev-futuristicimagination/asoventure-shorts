@@ -5,6 +5,7 @@ export interface ShortItem {
   title: string;
   narration: string;
   videoPrompt: string;
+  useVeo3?: boolean;  // false=Canvas(¥0)、true=Veo3(¥420)、未指定=カテゴリデフォルト
 }
 
 // Canvas動画（テキスト＋背景＋BGM）用アイテム型

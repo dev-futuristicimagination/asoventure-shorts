@@ -90,7 +90,30 @@ export function inferWeight(topic: string): number {
   return 2;
 }
 
-// Phase A: Veo3リクエスト → pending.json保存
+// ─── Veo3 vs Canvas 振り分けルール ─────────────────────────────────
+// 【2026-05-07 コスト最適化】
+// Veo3: $2.80/本(¥420) → 実績証明済みカテゴリのみ使用
+// Canvas: ¥0/本 → 実績未証明・低パフォーマンスカテゴリに使用
+//
+// 実測データ（2026-05-07）:
+//   cheese: 平均3,303回 → Veo3継続（ROI証明済み）
+//   job: 平均104回 → Canvas切替（Veo3コスト回収不可）
+//   finance/health/education/life/music1963: 20〜106回 → Canvas
+//
+// 月次コスト:
+//   旧: 8カテゴリ × ¥420 × 30日 = ¥100,800
+//   新: cheese × ¥420 × 30日 = ¥12,600（88%削減）
+const VEO3_CATEGORIES = new Set(['cheese']); // 実績証明後に追加可
+
+function shouldUseVeo3(category: string, item: ShortItem): boolean {
+  // アイテム個別指定を最優先
+  if (item.useVeo3 === true) return true;
+  if (item.useVeo3 === false) return false;
+  // カテゴリデフォルト
+  return VEO3_CATEGORIES.has(category);
+}
+
+// Phase A: Veo3 or Canvas → pending.json保存 or 直接アップロード
 export async function phaseA(
   category: string,
   pools: ShortItem[]
@@ -103,6 +126,22 @@ export async function phaseA(
     item.topic, item.narration, category
   );
 
+  // ── Veo3 vs Canvas 振り分け ──────────────────────────────────
+  if (!shouldUseVeo3(category, item)) {
+    // Canvas方式: 即時生成→アップロード（pending.json不要・コスト¥0）
+    const msg = `[${category}] Canvas生成 → "${item.title}" (Veo3スキップ・コスト削減)`;
+    await notifyDiscord(msg);
+    // canvas-canvasルートへ内部リダイレクト（API自己呼び出し）
+    const canvasUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://asoventure-shorts.vercel.app'}/api/${category}-canvas`;
+    try {
+      await fetch(canvasUrl, { headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` } });
+    } catch {
+      // canvas APIが存在しないカテゴリはスキップ（エラーにしない）
+    }
+    return { ok: true, message: msg };
+  }
+
+  // ── Veo3方式: 非同期生成 → pending.json保存 ─────────────────
   // 日本語テキストオーバーレイをサニタイズ
   const cleanPrompt = sanitizeVideoPrompt(item.videoPrompt);
   // キャラクタースピーチ注入（Veo3がキャラに喋らせる → TTS不要）
@@ -116,7 +155,7 @@ export async function phaseA(
   };
   await savePending(category, pending);
 
-  const msg = `[${category}] Phase A完了: "${item.title}" → Veo3生成中`;
+  const msg = `[${category}] Phase A完了: "${item.title}" → Veo3生成中 (¥420)`;
   await notifyDiscord(msg);
   return { ok: true, message: msg };
 }
