@@ -8,11 +8,11 @@ const JOBWAN = `2.5D anime style VTuber character "Jobwan": young male Shiba Inu
 const CTA: CtaConfig = {
   block: [
     '━━━━━━━━━━━━━━━━━━━━',
-    '✅ ガクチカ・ES・面接対策をAIで解決',
-    '👇 Cheese 無料LINE登録',
+    '✅ LINEにひと言→AIがガクチカ・ES自動生成',
+    '👇 Cheese 無料LINE登録（就活生向け）',
     'https://lin.ee/8VAVNEk?utm_source=youtube&utm_medium=shorts&utm_campaign=jobwan_job',
     '',
-    '#就活 #ガクチカ #ES #面接対策 #AI #Shorts #就活生 #内定 #自己PR',
+    '#就活 #ガクチカ #ES #AI #Shorts #就活生 #内定 #自己PR',
   ],
   tags: ['就活', 'ガクチカ', 'ES', '面接対策', 'AI', 'Shorts', '就活生', '内定', 'Cheese'],
   ytCategoryId: '27',
@@ -22,25 +22,25 @@ const POOLS: ShortItem[] = [
   {
     topic: '面接でよく聞かれる質問TOP3',
     title: '面接で必ず聞かれるTOP3の答え方🎯ジョブわん流',
-    narration: '面接でよく聞かれる「学生時代に力を入れたこと」「志望理由」「自己PR」。この3つをおさえれば怖くない。詳しくはCheese無料登録で練習しよう！',
+    narration: '面接でよく聞かれる「学生時代に力を入れたこと」「志望理由」「自己PR」。この3つをおさえれば怖くない。ガクチカをLINEで自動作成できるCheese、無料登録はこちら！',
     videoPrompt: `Opening thumbnail frame: ${JOBWAN} holding "TOP3" sign with confident smile, bold white text "面接TOP3の答え方！" at top. Scene: Jobwan lists 3 interview questions on glowing whiteboard, demonstrates perfect answer for each with energy. Clock ticking urgently in background. Exam room setting.`,
   },
   {
     topic: 'ESの通過率を上げる方法',
     title: 'ESで落とされる人の共通点とは？ジョブわんが解説',
-    narration: 'ESで落とされる人には共通点がある。具体性がない、数字がない、誰でも言えることを書く。Cheeseのエキスパートと一緒に克服しよう。',
+    narration: 'ESで落とされる人には共通点がある。具体性がない、数字がない、誰でも言えることを書く。LINEにひと言送るだけでAIがES・ガクチカを作るCheese、無料登録はこちら！',
     videoPrompt: `Opening thumbnail frame: ${JOBWAN} with magnifying glass examining paper, bold white text "ES通過率UP！" at top. Scene: Jobwan shows two ESes side by side - bad one with red X marks, good one with gold checkmarks. He circles key differences. Clean office setting.`,
   },
   {
     topic: 'インターン選考突破術',
     title: 'インターン倍率10倍でも受かる方法🏆ジョブわん',
-    narration: 'インターンの倍率は10倍以上のところも多い。でもコツをつかめば大丈夫。Cheeseで選考対策を始めよう。',
+    narration: 'インターンの倍率は10倍以上のところも多い。でもES・ガクチカを準備しておけば大丈夫。LINEにひと言送るだけでAIがガクチカを作るCheese、無料登録はこちら！',
     videoPrompt: `Opening thumbnail frame: ${JOBWAN} jumping through "10x difficulty" barrier triumphantly, bold white text "倍率10倍でも受かる！" at top. Scene: Jobwan navigates obstacle course representing interview stages, clears each hurdle with strategy tips floating above. Victory pose at end.`,
   },
   {
     topic: '就活スケジュール管理',
     title: '就活スケジュール完璧管理術📅ジョブわん流',
-    narration: '説明会・ES・面接が重なって混乱してない？Cheeseで就活スケジュールをまるごと管理しよう。',
+    narration: '説明会・ES・面接が重なって混乱してない？まずESとガクチカをAIで仕上げておこう。LINEにひと言送るだけで作れるCheese、無料登録はこちら！',
     videoPrompt: `Opening thumbnail frame: ${JOBWAN} with organized colorful calendar, bold white text "スケジュール完璧管理！" at top. Scene: Jobwan transforms chaotic overlapping calendar into color-coded organized schedule. He sighs with relief and gives thumbs up.`,
   },
   {
