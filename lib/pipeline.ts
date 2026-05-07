@@ -42,15 +42,55 @@ function sanitizeVideoPrompt(prompt: string): string {
     .trim();
 }
 
+// ─── パフォーマンスベース重み付き選択 ─────────────────────────────
+// 【2026-05-07 実データ分析結果に基づく設計】
+// 今日の実績: Finance「初任給の使い方」= 128回 >> Job「ガクチカ」= 1回
+//
+// 勝ちパターン（重み4〜5）:
+//   ① 具体的ライフイベント（初任給・引越し・NISA）
+//   ② 「の使い方」「が最強」「を即解消」実用フレーミング
+//   ③ ターゲット：就活生＋社会人の最大公約数（Finance・Health系）
+//
+// 負けパターン（重み1）:
+//   ① 就活専用すぎる（ガクチカ・プレッシャー）
+//   ② 感情解消型（悩んでも・辛い・友達関係）
+//   ③ 狭いターゲット
+
+interface WeightedItem<T> { item: T; weight: number; }
+
+export function weightedRandom<T>(items: WeightedItem<T>[]): T {
+  const total = items.reduce((s, i) => s + i.weight, 0);
+  let r = Math.random() * total;
+  for (const wi of items) {
+    r -= wi.weight;
+    if (r <= 0) return wi.item;
+  }
+  return items[items.length - 1].item;
+}
+
+// トピック名から重みを自動判定（キーワードベース）
+export function inferWeight(topic: string): number {
+  const t = topic;
+  // 勝ちパターン
+  if (/初任給|NISA|節約|固定費|副業|確定申告|家計|投資|ふるさと納税/.test(t)) return 5;
+  if (/の使い方|最強|即解消|科学的|証明|3倍|5選|5ステップ/.test(t)) return 4;
+  if (/免疫|集中力|睡眠|栄養|食事|引越し|一人暮らし/.test(t)) return 3;
+  if (/AI|自動|効率|習慣|スキル/.test(t)) return 3;
+  // 負けパターン
+  if (/ガクチカ|就活プレッシャー|悩んで|友達|辛い|ストレス/.test(t)) return 1;
+  if (/リフレッシュ|メンタル崩壊|限界/.test(t)) return 1;
+  return 2; // デフォルト
+}
+
 // Phase A: Veo3リクエスト → pending.json保存
 export async function phaseA(
   category: string,
   pools: ShortItem[],
   usedIndexKey: string
 ): Promise<{ ok: boolean; message: string }> {
-  // 使用済みインデックス管理（簡易ランダム選択）
-  const idx = Math.floor(Math.random() * pools.length);
-  const item = pools[idx];
+  // 重み付き選択（パフォーマンス実績に基づく）
+  const weighted = pools.map(p => ({ item: p, weight: inferWeight(p.topic) }));
+  const item = weightedRandom(weighted);
 
   const { narration, youtubeDescription } = await generateDynamicContent(
     item.topic, item.narration, category

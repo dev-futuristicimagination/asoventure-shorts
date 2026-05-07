@@ -20,9 +20,10 @@
     // Health: 月水金
     { "path": "/api/health?phase=a", "schedule": "0 12 * * 1,3,5" },
     { "path": "/api/health?phase=b", "schedule": "20 12 * * 1,3,5" },
-    // Finance: 火木土
-    { "path": "/api/finance?phase=a","schedule": "0 12 * * 2,4,6" },
-    { "path": "/api/finance?phase=b","schedule": "20 12 * * 2,4,6" },
+    // ── TIER 1: Finance 毎日（128回実証！就活生+社会人全員に刺さる最大公約数）
+    // UTC 10:30 = JST 19:30
+    { "path": "/api/finance?phase=a","schedule": "30 10 * * *" },
+    { "path": "/api/finance?phase=b","schedule": "50 10 * * *" },
     // Education: 月木
     { "path": "/api/education?phase=a","schedule": "30 12 * * 1,4" },
     { "path": "/api/education?phase=b","schedule": "50 12 * * 1,4" },
@@ -40,6 +41,11 @@
     { "path": "/api/finance-canvas?phase=canvas",   "schedule": "5 0 * * *" },
     { "path": "/api/education-canvas?phase=canvas", "schedule": "10 0 * * *" },
     { "path": "/api/life-canvas?phase=canvas",      "schedule": "15 0 * * *" },
-    { "path": "/api/japan-canvas?phase=canvas",     "schedule": "20 0 * * *" }
+    { "path": "/api/japan-canvas?phase=canvas",     "schedule": "20 0 * * *" },
+
+    // ── 毎日22:00 JST: YouTube Analytics 自動分析 → Discord通知 ──
+    // 【2026-05-07 実データ: Finance 128回 vs Job 1回の差を自動検出】
+    // 勝ちパターン・負けパターンをDiscordに通知 → inferWeight関数が次の生成に反映
+    { "path": "/api/youtube-analytics", "schedule": "0 13 * * *" }
   ]
 }
