@@ -1,19 +1,36 @@
 {
   "framework": "nextjs",
   "crons": [
+    // ── TIER 1: Cheese 1本/日（直接収益・収益最大化）
+    // UTC 11:00 = JST 20:00
     { "path": "/api/cheese?phase=a", "schedule": "0 11 * * *" },
     { "path": "/api/cheese?phase=b", "schedule": "20 11 * * *" },
-    { "path": "/api/job?phase=a",    "schedule": "5 11 * * *" },
-    { "path": "/api/job?phase=b",    "schedule": "25 11 * * *" },
-    { "path": "/api/health?phase=a", "schedule": "10 11 * * *" },
-    { "path": "/api/health?phase=b", "schedule": "30 11 * * *" },
-    { "path": "/api/finance?phase=a","schedule": "15 11 * * *" },
-    { "path": "/api/finance?phase=b","schedule": "35 11 * * *" },
-    { "path": "/api/education?phase=a","schedule": "20 11 * * *" },
-    { "path": "/api/education?phase=b","schedule": "40 11 * * *" },
-    { "path": "/api/life?phase=a",   "schedule": "25 11 * * *" },
-    { "path": "/api/life?phase=b",   "schedule": "45 11 * * *" },
-    { "path": "/api/music1963?phase=a","schedule": "30 11 * * *" },
-    { "path": "/api/music1963?phase=b","schedule": "50 11 * * *" }
+
+    // ── TIER 1: Japan 1本/日（グローバル高CPM・英語コンテンツ）
+    // UTC 10:00 = JST 19:00
+    { "path": "/api/japan?phase=a",  "schedule": "0 10 * * *" },
+    { "path": "/api/japan?phase=b",  "schedule": "20 10 * * *" },
+
+    // ── TIER 2: Job 1本/日（Cheese橋渡し）
+    // UTC 11:30 = JST 20:30
+    { "path": "/api/job?phase=a",    "schedule": "30 11 * * *" },
+    { "path": "/api/job?phase=b",    "schedule": "50 11 * * *" },
+
+    // ── TIER 3: Tips系 週3本（チャンネル登録・認知用・最小コスト）
+    // Health: 月水金
+    { "path": "/api/health?phase=a", "schedule": "0 12 * * 1,3,5" },
+    { "path": "/api/health?phase=b", "schedule": "20 12 * * 1,3,5" },
+    // Finance: 火木土
+    { "path": "/api/finance?phase=a","schedule": "0 12 * * 2,4,6" },
+    { "path": "/api/finance?phase=b","schedule": "20 12 * * 2,4,6" },
+    // Education: 月木
+    { "path": "/api/education?phase=a","schedule": "30 12 * * 1,4" },
+    { "path": "/api/education?phase=b","schedule": "50 12 * * 1,4" },
+    // Life: 火金
+    { "path": "/api/life?phase=a",   "schedule": "30 12 * * 2,5" },
+    { "path": "/api/life?phase=b",   "schedule": "50 12 * * 2,5" },
+    // Music1963: 水土
+    { "path": "/api/music1963?phase=a","schedule": "0 13 * * 3,6" },
+    { "path": "/api/music1963?phase=b","schedule": "20 13 * * 3,6" }
   ]
 }
