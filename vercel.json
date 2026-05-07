@@ -31,6 +31,15 @@
     { "path": "/api/life?phase=b",   "schedule": "50 12 * * 2,5" },
     // Music1963: 水土
     { "path": "/api/music1963?phase=a","schedule": "0 13 * * 3,6" },
-    { "path": "/api/music1963?phase=b","schedule": "20 13 * * 3,6" }
+    { "path": "/api/music1963?phase=b","schedule": "20 13 * * 3,6" },
+
+    // ── Canvas動画（Veo3不要・コスト$0）: オウンドメディア系の記事流入導線 ──
+    // 毎朝9:00 JST (00:00 UTC) - Veo3とは時間帯を完全に分離
+    // 1本あたり約30秒で生成完了（Veo3の20分待機と比較して高速）
+    { "path": "/api/health-canvas?phase=canvas",    "schedule": "0 0 * * *" },
+    { "path": "/api/finance-canvas?phase=canvas",   "schedule": "5 0 * * *" },
+    { "path": "/api/education-canvas?phase=canvas", "schedule": "10 0 * * *" },
+    { "path": "/api/life-canvas?phase=canvas",      "schedule": "15 0 * * *" },
+    { "path": "/api/japan-canvas?phase=canvas",     "schedule": "20 0 * * *" }
   ]
 }

@@ -1,11 +1,12 @@
-// lib/pipeline.ts — Phase A / Phase B 共通パイプライン
+// lib/pipeline.ts — Phase A / Phase B 共通パイプライン + Canvas（テキスト動画）
 
 import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
 import { getYouTubeToken, uploadToYouTube, postToBuffer } from './youtube';
 import { generateTTS, getTTSDuration } from './tts';
 import { savePending, loadPending, clearPending } from './github';
 import { generateDynamicContent, notifyDiscord } from './gemini';
-import type { ShortItem, CtaConfig, PendingData } from './types';
+import { generateCanvasVideo } from './canvas';
+import type { ShortItem, CtaConfig, PendingData, CanvasItem } from './types';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { mkdtemp, writeFile, readFile, rm } from 'fs/promises';
@@ -106,4 +107,50 @@ async function mixVideoTTS(videoBuffer: Buffer, ttsBuffer: Buffer, ttsDuration: 
   const result = await readFile(outPath);
   await rm(tmpDir, { recursive: true }).catch(() => {});
   return result;
+}
+
+// ─── Canvas Pipeline（Veo3不要・コスト$0）────────────────────────────
+// オウンドメディア記事の要約動画 = テキスト + グラジエント背景 + BGM + TTS
+export async function phaseCanvas(
+  category: string,
+  item: CanvasItem,
+  cta: CtaConfig
+): Promise<{ ok: boolean; message: string; youtubeUrl?: string }> {
+  try {
+    // Canvas動画生成（FFmpegのみ・Veo3不要）
+    const videoBuffer = await generateCanvasVideo({
+      category,
+      title: item.title,
+      points: item.points,
+      narration: item.narration,
+      siteUrl: item.siteUrl,
+      ctaText: item.ctaText,
+      lang: item.lang ?? 'ja',
+    });
+
+    // YouTube投稿
+    const token = await getYouTubeToken();
+    const description = [
+      item.points.map(p => `✦ ${p}`).join('\n'),
+      '',
+      item.ctaText,
+      item.fullUrl,
+    ].join('\n');
+
+    const youtubeUrl = await uploadToYouTube(
+      token, videoBuffer, item.title, item.topic, description, cta
+    );
+
+    // Buffer(X)投稿
+    await postToBuffer(item.topic, youtubeUrl, category);
+
+    const msg = `[${category}] Canvas完了: "${item.title}" → ${youtubeUrl}`;
+    await notifyDiscord(msg);
+    return { ok: true, message: msg, youtubeUrl };
+
+  } catch (e) {
+    const msg = `[${category}] Canvas失敗: ${e instanceof Error ? e.message : String(e)}`;
+    await notifyDiscord(msg);
+    return { ok: false, message: msg };
+  }
 }

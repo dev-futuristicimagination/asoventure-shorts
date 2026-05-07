@@ -7,6 +7,18 @@ export interface ShortItem {
   videoPrompt: string;
 }
 
+// Canvas動画（テキスト＋背景＋BGM）用アイテム型
+export interface CanvasItem {
+  topic: string;
+  title: string;
+  narration: string;      // TTS読み上げ原稿
+  points: string[];       // 画面に表示する箇条書き（3〜5個・各20文字以内推奨）
+  siteUrl: string;        // 動画内表示用短縮URL (例: health.asoventure.jp)
+  fullUrl: string;        // 説明欄・X投稿用フルURL
+  ctaText: string;        // CTA文言 (例: "詳しくは↓")
+  lang?: 'ja' | 'en';
+}
+
 export interface PendingData {
   category: string;
   topic: string;
