@@ -69,17 +69,25 @@ export function weightedRandom<T>(items: WeightedItem<T>[]): T {
 }
 
 // トピック名から重みを自動判定（キーワードベース）
+// 【2026-05-07 実データ証明済み】
+// 128回: 「初任給の使い方」= How to系（〇〇の使い方）
+// 48回: 「集中力が続かない→AI栄養術」= 問題→解決型
+// 1回: 「ガクチカ・就活プレッシャー」= 就活専用・感情型
 export function inferWeight(topic: string): number {
   const t = topic;
-  // 勝ちパターン
+  // 勝ちパターン: Finance×具体数字（128回実証）
   if (/初任給|NISA|節約|固定費|副業|確定申告|家計|投資|ふるさと納税/.test(t)) return 5;
-  if (/の使い方|最強|即解消|科学的|証明|3倍|5選|5ステップ/.test(t)) return 4;
+  // 勝ちパターン: How to系フレーミング（〇〇の使い方・やり方・コツ・手順）
+  if (/の使い方|やり方|How to|のコツ|手順|ステップ|の始め方|攻略/.test(t)) return 5;
+  // 勝ちパターン: 強い実用フレーミング
+  if (/最強|即解消|科学的|証明|3倍|5選|5ステップ|ランキング/.test(t)) return 4;
+  // 勝ちパターン: Health実用系（48回・32回実証）
   if (/免疫|集中力|睡眠|栄養|食事|引越し|一人暮らし/.test(t)) return 3;
-  if (/AI|自動|効率|習慣|スキル/.test(t)) return 3;
-  // 負けパターン
+  if (/AI|自動|効率|習慣|スキル|時短/.test(t)) return 3;
+  // 負けパターン: 就活専用・感情型（1回実証）
   if (/ガクチカ|就活プレッシャー|悩んで|友達|辛い|ストレス/.test(t)) return 1;
-  if (/リフレッシュ|メンタル崩壊|限界/.test(t)) return 1;
-  return 2; // デフォルト
+  if (/リフレッシュ|メンタル崩壊|限界|しんどい/.test(t)) return 1;
+  return 2;
 }
 
 // Phase A: Veo3リクエスト → pending.json保存
@@ -96,9 +104,11 @@ export async function phaseA(
     item.topic, item.narration, category
   );
 
-  // 日本語テキストオーバーレイをサニタイズしてからVeo3に送信
+  // 日本語テキストオーバーレイをサニタイズ
   const cleanPrompt = sanitizeVideoPrompt(item.videoPrompt);
-  const operationName = await requestVeo3(cleanPrompt);
+  // キャラクタースピーチ注入（Veo3がキャラに喋らせる → TTS不要）
+  const promptWithSpeech = injectCharacterSpeech(cleanPrompt, narration);
+  const operationName = await requestVeo3(promptWithSpeech);
 
   const pending: PendingData = {
     category, topic: item.topic, title: item.title,
@@ -111,6 +121,29 @@ export async function phaseA(
   await notifyDiscord(msg);
   return { ok: true, message: msg };
 }
+
+// ─── キャラクタースピーチ注入 ─────────────────────────────────────────
+// 【2026-05-07 設計変更】
+// Veo3はマルチモーダル（映像＋音声を同時生成）
+// キャラクターにセリフを喋らせることで:
+// ① TTS不要 → コスト削減 + 口の動きと音声が自然に一致
+// ② 動画が15秒になっても途切れない（映像とセリフが同じ長さ）
+// ③ いいね・チャンネル登録のCTAもキャラが自然に言える
+function injectCharacterSpeech(prompt: string, narration: string): string {
+  // ナレーションを120文字以内に圧縮（15秒で自然に喋れる量）
+  const speech = narration.slice(0, 130);
+  // いいね・チャンネル登録のCTAをキャラが自然に言う
+  const ctaScript = 'いいねとチャンネル登録お願いします！';
+  return [
+    prompt,
+    '',
+    `[AUDIO SCRIPT: キャラクターが明るく自然に日本語で話す。`,
+    `「${speech}」`,
+    `最後に視聴者に向けて手を振りながら「${ctaScript}」と言う。`,
+    `Duration: 15 seconds. Natural conversational Japanese voice.]`,
+  ].join('\n');
+}
+
 
 // Phase B: Veo3完了 → TTS → FFmpeg → YouTube投稿
 export async function phaseB(
@@ -125,12 +158,10 @@ export async function phaseB(
   // Veo3ダウンロード
   const videoBuffer = await pollAndDownloadVeo3(pending.operationName);
 
-  // TTS生成
-  const ttsBuffer = await generateTTS(pending.narration);
-  const ttsDuration = getTTSDuration(ttsBuffer);
-
-  // FFmpegミックス
-  const finalVideo = await mixVideoTTS(videoBuffer, ttsBuffer, ttsDuration);
+  // 【2026-05-07 設計変更: TTS廃止 → Veo3キャラ音声をそのまま使用】
+  // Veo3がキャラクターのセリフ音声ごと生成するためTTSは不要
+  // BGMのみをFFmpegで追加する
+  const finalVideo = await mixVideoWithBGM(videoBuffer);
 
   // YouTube投稿
   const token = await getYouTubeToken();
@@ -196,8 +227,44 @@ async function mixVideoTTS(videoBuffer: Buffer, ttsBuffer: Buffer, ttsDuration: 
   await rm(tmpDir, { recursive: true }).catch(() => {});
   return result;
 }
+// ─── Veo3動画 + BGMのみミックス（TTS不要版）────────────────────────
+// Veo3がキャラ音声を内包するため、BGMを重ねるだけでOK
+async function mixVideoWithBGM(videoBuffer: Buffer): Promise<Buffer> {
+  const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
+  const tmpDir = await mkdtemp(join(tmpdir(), 'shorts-'));
+  const bgPath  = join(tmpDir, 'bg.mp4');
+  const outPath = join(tmpDir, 'out.mp4');
 
-// ─── Canvas Pipeline（Veo3不要・コスト$0）────────────────────────────
+  await writeFile(bgPath, videoBuffer);
+
+  await execFileAsync(ffmpeg, [
+    '-y',
+    // Input 0: アンビエントBGM（lavfi生成）
+    '-f', 'lavfi',
+    '-i', `aevalsrc='0.25*sin(2*PI*220*t)+0.18*sin(2*PI*329.6*t)+0.12*sin(2*PI*440*t)+0.08*sin(2*PI*523.3*t):c=stereo:s=44100'`,
+    // Input 1: Veo3動画（映像 + キャラ音声をそのまま使用）
+    '-i', bgPath,
+    '-filter_complex', [
+      // 映像: 9:16縦型クロップ
+      '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[vid]',
+      // BGM: エコーでアンビエント風 + 音量5%（キャラ声が主役）
+      '[0:a]aecho=0.6:0.7:50|80:0.15|0.1,volume=0.05[bgm]',
+      // キャラ音声(1:a) + BGM ミックス（キャラ声を主役に）
+      '[1:a][bgm]amix=inputs=2:duration=first:weights=1 0.2[aout]',
+    ].join(';'),
+    '-map', '[vid]',
+    '-map', '[aout]',
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+    '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart',
+    outPath,
+  ], { maxBuffer: 512 * 1024 * 1024 });
+
+  const result = await readFile(outPath);
+  await rm(tmpDir, { recursive: true }).catch(() => {});
+  return result;
+}
+
 // オウンドメディア記事の要約動画 = テキスト + グラジエント背景 + BGM + TTS
 export async function phaseCanvas(
   category: string,

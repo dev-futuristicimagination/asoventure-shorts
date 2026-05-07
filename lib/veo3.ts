@@ -15,7 +15,7 @@ export async function requestVeo3(prompt: string, imageBase64?: string): Promise
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         instances: [instance],
-        parameters: { sampleCount: 1, durationSeconds: 8, aspectRatio: '9:16' },
+        parameters: { sampleCount: 1, durationSeconds: 15, aspectRatio: '9:16' },
       }),
     }
   );

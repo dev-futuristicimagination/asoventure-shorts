@@ -25,6 +25,14 @@ export async function uploadToYouTube(
   description: string,
   cta: CtaConfig
 ): Promise<string> {
+  // いいね・チャンネル登録の導線（エンゲージメント促進）
+  // 【2026-05-07追加】視聴者への行動促進CTAを説明欄の冒頭に配置
+  const ENGAGEMENT_CTA = [
+    '👍 いいね & 🔔 チャンネル登録で毎日役立つ情報をお届け！',
+    '💬 感想・質問はコメントで教えてください↓',
+    '',
+  ].join('\n');
+
   // AI開示文（YouTube 2024年ポリシー準拠）
   // AI生成コンテンツの開示義務：現実的に見えるAI生成コンテンツには必須
   // アニメ調でも開示しておくことでBAN/ポリシー違反リスクを最小化する
@@ -39,7 +47,7 @@ export async function uploadToYouTube(
   const metadata = {
     snippet: {
       title: `${title} #Shorts`.slice(0, 100),
-      description: [topic, '', description, AI_DISCLOSURE, '', ...cta.block].join('\n'),
+      description: [ENGAGEMENT_CTA, topic, '', description, AI_DISCLOSURE, '', ...cta.block].join('\n'),
       tags: cta.tags,
       categoryId: cta.ytCategoryId,
       defaultLanguage: 'ja',
