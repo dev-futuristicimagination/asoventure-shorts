@@ -208,3 +208,20 @@ export async function postToBuffer(topic: string, youtubeUrl: string, category: 
   const json = await res.json() as { errors?: unknown; data?: { createPost?: { message?: string } } };
   return !json.errors && !json.data?.createPost?.message;
 }
+
+// ─── 記事→X直接投稿（Article Pipeline用）────────────────────────────────
+// 動画URLなしで記事URLと生成済みX投稿文をBufferにポスト
+export async function postArticleToBuffer(xPostText: string): Promise<boolean> {
+  const token = process.env.BUFFER_ACCESS_TOKEN || '';
+  const channelId = process.env.BUFFER_CHANNEL_ID || '69e04b4f031bfa423c0b5e18';
+  if (!token) return false;
+  const res = await fetch('https://api.buffer.com/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      query: `mutation { createPost(input: { text: ${JSON.stringify(xPostText)}, channelId: "${channelId}", schedulingType: automatic, mode: addToQueue }) { ... on PostActionSuccess { post { id } } ... on MutationError { message } } }`,
+    }),
+  });
+  const json = await res.json() as { errors?: unknown; data?: { createPost?: { message?: string } } };
+  return !json.errors && !json.data?.createPost?.message;
+}

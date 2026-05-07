@@ -116,6 +116,22 @@ function analyzePerformance(stats: VideoStats[]): string {
       .forEach(v => lines.push(`  ${v.views}回 | ${v.title.slice(0, 40)}...`));
   }
 
+  // ─── Veo3昇格候補チェック（7日以内に500回超え）────────────────────
+  // 【2026-05-07 追加】昇格基準: 7日以内投稿 AND 再生500回超 AND いいね率>1%
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const upgradeCandidate = allVideos.filter(v => {
+    const likeRate = v.views > 0 ? v.likes / v.views : 0;
+    return v.publishedAt >= sevenDaysAgo && v.views >= 500 && likeRate >= 0.01;
+  });
+
+  if (upgradeCandidate.length > 0) {
+    lines.push('', '🚀 **Veo3昇格候補（通知のみ）:**');
+    upgradeCandidate.forEach(v =>
+      lines.push(`  ⬆️ ${v.title.slice(0, 35)} | ${v.views}回 / いいね率${Math.round((v.likes/v.views)*100)}%`)
+    );
+    lines.push('  → 同トピックでVeo3版を生成することを検討してください');
+  }
+
   lines.push('', '→ 勝ちパターンをプールに反映済み（inferWeight関数）');
 
   return lines.join('\n');

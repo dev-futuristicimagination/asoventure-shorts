@@ -26,6 +26,12 @@
     { "path": "/api/life-canvas?phase=canvas",   "schedule": "20 0 * * *"   },
     { "path": "/api/japan-canvas?phase=canvas",  "schedule": "25 0 * * *"   },
     { "path": "/api/job-canvas?phase=canvas",    "schedule": "30 0 * * *"   },
-    { "path": "/api/youtube-analytics",          "schedule": "0 13 * * *"   }
+    { "path": "/api/youtube-analytics",          "schedule": "0 13 * * *"   },
+    { "path": "/api/article-pipeline?category=health",    "schedule": "0 1 * * *"  },
+    { "path": "/api/article-pipeline?category=finance",   "schedule": "5 1 * * *"  },
+    { "path": "/api/article-pipeline?category=education", "schedule": "10 1 * * *" },
+    { "path": "/api/article-pipeline?category=life",      "schedule": "15 1 * * *" },
+    { "path": "/api/article-pipeline?category=job",       "schedule": "20 1 * * *" },
+    { "path": "/api/article-pipeline?category=music1963", "schedule": "25 1 * * *" }
   ]
 }
