@@ -93,8 +93,7 @@ export function inferWeight(topic: string): number {
 // Phase A: Veo3リクエスト → pending.json保存
 export async function phaseA(
   category: string,
-  pools: ShortItem[],
-  usedIndexKey: string
+  pools: ShortItem[]
 ): Promise<{ ok: boolean; message: string }> {
   // 重み付き選択（パフォーマンス実績に基づく）
   const weighted = pools.map(p => ({ item: p, weight: inferWeight(p.topic) }));

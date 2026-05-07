@@ -54,7 +54,7 @@ const POOLS: ShortItem[] = [
 export async function GET(req: Request) {
   const phase = new URL(req.url).searchParams.get('phase');
   try {
-    if (phase === 'a' || phase === 'A') return NextResponse.json(await phaseA('music1963', POOLS, 'music-idx'));
+    if (phase === 'a' || phase === 'A') return NextResponse.json(await phaseA('music1963', POOLS));
     if (phase === 'b' || phase === 'B') return NextResponse.json(await phaseB('music1963', CTA));
     return NextResponse.json({ error: 'phase=a or phase=b required' }, { status: 400 });
   } catch (e) {
