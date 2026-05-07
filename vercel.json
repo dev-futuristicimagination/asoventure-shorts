@@ -1,70 +1,31 @@
 {
   "framework": "nextjs",
   "crons": [
-    // ══════════════════════════════════════════════════════════════
-    // VOLUME STRATEGY 2026-05-07
-    // 目標: ~15本/日（Veo3×4 + Canvas×11）段階的ランプアップ
-    // YouTube安全基準: 1日15本以内・別トピック・段階的増量
-    // Veo3: TIER1=毎日・TIER2=週5・TIER3=週3（課金コスト管理）
-    // Canvas: 全11カテゴリ・JST 00:00〜04:00に分散
-    // ══════════════════════════════════════════════════════════════
-
-    // ── VEO3 TIER1: 毎日（実績データ上位・直接収益系）────────────────
-    // Cheese: 20:00 JST (11:00 UTC)
-    { "path": "/api/cheese?phase=a", "schedule": "0 11 * * *" },
-    { "path": "/api/cheese?phase=b", "schedule": "20 11 * * *" },
-
-    // Finance: 19:30 JST (10:30 UTC)【128回実証・TIER1昇格 2026-05-07】
-    { "path": "/api/finance?phase=a","schedule": "30 10 * * *" },
-    { "path": "/api/finance?phase=b","schedule": "50 10 * * *" },
-
-    // Japan: 19:00 JST (10:00 UTC)（グローバル高CPM）
-    { "path": "/api/japan?phase=a",  "schedule": "0 10 * * *" },
-    { "path": "/api/japan?phase=b",  "schedule": "20 10 * * *" },
-
-    // ── VEO3 TIER2: 毎日（Cheese橋渡し・社会人キャリア全般）──────────
-    // Job: 20:30 JST (11:30 UTC)
-    { "path": "/api/job?phase=a",    "schedule": "30 11 * * *" },
-    { "path": "/api/job?phase=b",    "schedule": "50 11 * * *" },
-
-    // ── VEO3 TIER3: 週3〜4本（認知・チャンネル登録目的）──────────────
-    // Health: 月水金 21:00 JST
-    { "path": "/api/health?phase=a", "schedule": "0 12 * * 1,3,5" },
-    { "path": "/api/health?phase=b", "schedule": "20 12 * * 1,3,5" },
-    // Education: 月木 21:30 JST
-    { "path": "/api/education?phase=a","schedule": "30 12 * * 1,4" },
-    { "path": "/api/education?phase=b","schedule": "50 12 * * 1,4" },
-    // Life: 火金 21:30 JST
-    { "path": "/api/life?phase=a",   "schedule": "30 12 * * 2,5" },
-    { "path": "/api/life?phase=b",   "schedule": "50 12 * * 2,5" },
-    // Music1963: 水土 22:00 JST（独立ブランド）
-    { "path": "/api/music1963?phase=a","schedule": "0 13 * * 3,6" },
-    { "path": "/api/music1963?phase=b","schedule": "20 13 * * 3,6" },
-
-    // ══════════════════════════════════════════════════════════════
-    // CANVAS: 全11カテゴリ・JST 09:00〜10:00 (UTC 00:00〜01:00)
-    // コスト$0・Veo3とは時間帯を完全分離・1本あたり~30秒で生成
-    // ══════════════════════════════════════════════════════════════
-
-    // 【勝ち筋Canvas：How to×Finance系・毎日2本】
-    { "path": "/api/cheese-canvas?phase=canvas",   "schedule": "0 0 * * *"  },
-    { "path": "/api/finance-canvas?phase=canvas",  "schedule": "5 0 * * *"  },
-
-    // 【2本目Finance Canvas: 昼12:00 JSTにも配信（検索流入×2）】
-    { "path": "/api/finance-canvas?phase=canvas",  "schedule": "0 3 * * *"  },
-
-    // 【Health Canvas: 毎日2本（48回・32回実証）】
-    { "path": "/api/health-canvas?phase=canvas",   "schedule": "10 0 * * *" },
-    { "path": "/api/health-canvas?phase=canvas",   "schedule": "10 3 * * *" },
-
-    // 【その他Canvas: 1本/日】
+    { "path": "/api/cheese?phase=a",             "schedule": "0 11 * * *"   },
+    { "path": "/api/cheese?phase=b",             "schedule": "20 11 * * *"  },
+    { "path": "/api/finance?phase=a",            "schedule": "30 10 * * *"  },
+    { "path": "/api/finance?phase=b",            "schedule": "50 10 * * *"  },
+    { "path": "/api/japan?phase=a",              "schedule": "0 10 * * *"   },
+    { "path": "/api/japan?phase=b",              "schedule": "20 10 * * *"  },
+    { "path": "/api/job?phase=a",                "schedule": "30 11 * * *"  },
+    { "path": "/api/job?phase=b",                "schedule": "50 11 * * *"  },
+    { "path": "/api/health?phase=a",             "schedule": "0 12 * * 1,3,5"  },
+    { "path": "/api/health?phase=b",             "schedule": "20 12 * * 1,3,5" },
+    { "path": "/api/education?phase=a",          "schedule": "30 12 * * 1,4"   },
+    { "path": "/api/education?phase=b",          "schedule": "50 12 * * 1,4"   },
+    { "path": "/api/life?phase=a",               "schedule": "30 12 * * 2,5"   },
+    { "path": "/api/life?phase=b",               "schedule": "50 12 * * 2,5"   },
+    { "path": "/api/music1963?phase=a",          "schedule": "0 13 * * 3,6"    },
+    { "path": "/api/music1963?phase=b",          "schedule": "20 13 * * 3,6"   },
+    { "path": "/api/cheese-canvas?phase=canvas", "schedule": "0 0 * * *"    },
+    { "path": "/api/finance-canvas?phase=canvas","schedule": "5 0 * * *"    },
+    { "path": "/api/finance-canvas?phase=canvas","schedule": "0 3 * * *"    },
+    { "path": "/api/health-canvas?phase=canvas", "schedule": "10 0 * * *"   },
+    { "path": "/api/health-canvas?phase=canvas", "schedule": "10 3 * * *"   },
     { "path": "/api/education-canvas?phase=canvas","schedule": "15 0 * * *" },
-    { "path": "/api/life-canvas?phase=canvas",     "schedule": "20 0 * * *" },
-    { "path": "/api/japan-canvas?phase=canvas",    "schedule": "25 0 * * *" },
-    { "path": "/api/job-canvas?phase=canvas",      "schedule": "30 0 * * *" },
-
-    // ── 毎日22:00 JST: YouTube Analytics 自動分析 → Discord通知 ──────
-    // 勝ちパターン・負けパターンを自動検出してDiscordに通知
-    { "path": "/api/youtube-analytics", "schedule": "0 13 * * *" }
+    { "path": "/api/life-canvas?phase=canvas",   "schedule": "20 0 * * *"   },
+    { "path": "/api/japan-canvas?phase=canvas",  "schedule": "25 0 * * *"   },
+    { "path": "/api/job-canvas?phase=canvas",    "schedule": "30 0 * * *"   },
+    { "path": "/api/youtube-analytics",          "schedule": "0 13 * * *"   }
   ]
 }

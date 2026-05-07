@@ -1,112 +1,53 @@
-// app/api/health-canvas/route.ts — パンダ子 健康tips Canvas動画
-// 【設計改訂 2026-05-07】
-// - ポイントを5〜6個に増量。各ポイントに「見出し＋補足説明」を含む
-// - ナレーションは60〜90秒分（オウンドメディア記事の要約として機能）
-// - 「続きが読みたい」と思わせる情報密度
-
+// app/api/health-canvas/route.ts
+// 【2026-05-07 設計修正】実記事ベース生成
+// health.asoventure.jp の実際の記事を取得 → AI要約 → Canvas動画
 import { NextResponse } from 'next/server';
 import { phaseCanvas } from '@/lib/pipeline';
+import { fetchLatestArticles, generateCanvasItemFromArticle } from '@/lib/articles';
 import type { CanvasItem, CtaConfig } from '@/lib/types';
 
 const CTA: CtaConfig = {
   block: [
     '━━━━━━━━━━━━━━━━━━━━',
-    '💚 健康・メンタルウェルネスの記事はこちら',
-    '👇 Asoventure Health',
-    'https://health.asoventure.jp?utm_source=youtube&utm_medium=shorts&utm_campaign=canvas_health',
-    '',
-    '📺 チャンネル登録で毎日30秒健康tips！',
-    '',
-    '#健康 #健康習慣 #メンタルヘルス #睡眠 #ストレス #Shorts #wellness',
+    '💚 記事の詳細はリンクをご覧ください',
+    '🔔 チャンネル登録で毎日健康情報をお届け！',
+    '👍 いいね & 🔔 チャンネル登録お願いします！',
+    '#健康 #健康習慣 #ダイエット #睡眠 #Shorts',
   ],
-  tags: ['健康', '健康習慣', 'メンタルヘルス', '睡眠改善', 'ストレス解消', 'Shorts', 'wellness'],
+  tags: ['健康', '健康習慣', 'ダイエット', '睡眠', '栄養', 'Shorts', '免疫力'],
   ytCategoryId: '26',
 };
 
-const CANVAS_POOLS: CanvasItem[] = [
+const FALLBACK_ITEMS: CanvasItem[] = [
   {
-    topic: '睡眠の質を科学的に上げる5習慣',
-    title: '科学が証明した睡眠の質を上げる5習慣💤',
-    narration: '今日は睡眠の質を科学的に改善する5つの習慣を解説します。スマホのブルーライトはメラトニンの分泌を最大50%抑制するため、就寝1時間前のオフが必須です。寝室の温度は18〜20度が体温を下げて入眠を促す最適な環境。カフェインの半減期は6時間あるため、午後2時以降の摂取は夜の睡眠を妨げます。起床時間を毎日一定にすることで体内時計が整い、自然な眠気が生まれやすくなります。アルコールは眠れる気がしますが、睡眠後半のレム睡眠を大幅に減少させます。詳しい根拠と実践方法は記事をご覧ください。',
-    points: [
-      '① 就寝1時間前にスマホをオフ\n→ ブルーライトがメラトニン分泌を50%抑制する',
-      '② 寝室の温度は18〜20度に設定\n→ 体温低下が眠気のスイッチを入れる',
-      '③ カフェインは午後2時が最終リミット\n→ 半減期6時間で夜まで体内に残る',
-      '④ 起床時間は毎日同じに固定する\n→ 体内時計が整い自然な入眠サイクルが生まれる',
-      '⑤ 就寝前のアルコールはNG\n→ レム睡眠を減らし睡眠の質を大幅低下させる',
-    ],
+    topic: '睡眠の質を高める方法',
+    title: '睡眠の質を劇的に改善する5つの習慣💤',
+    narration: '睡眠は量だけでなく質が重要です。就寝前のスマホ使用、カフェイン、室温の管理が睡眠の質を大きく左右します。科学的に証明された改善習慣を紹介します。',
+    points: ['① 就寝1時間前にスマホオフ\n→ ブルーライトがメラトニン分泌を阻害する', '② 寝室の温度は18〜20℃に\n→ 深部体温の低下が入眠を促す', '③ 毎日同じ時間に起床する\n→ 体内時計のリズムを固定する', '④ 就寝前のカフェインを避ける\n→ 半減期が6時間あるため午後3時以降は注意', '⑤ 起床後すぐに太陽光を浴びる\n→ セロトニン分泌で体内時計をリセット'],
     siteUrl: 'health.asoventure.jp',
-    fullUrl: 'https://health.asoventure.jp?utm_source=yt_canvas&utm_campaign=sleep_tips',
-    ctaText: '📖 科学的根拠の詳細はこちら→',
-  },
-  {
-    topic: 'ストレスを科学的に解消する5ステップ',
-    title: 'ストレスホルモンを下げる科学的な5ステップ🧘',
-    narration: 'ストレスを感じているとき、体内ではコルチゾールというホルモンが分泌されています。今日はコルチゾールを実際に下げることが証明されている5つの方法を紹介します。4-7-8呼吸法は迷走神経を刺激して副交感神経を活性化させます。10〜20分のウォーキングは脳内のエンドルフィンを増加させ気分を改善します。感謝日記はポジティブ感情を強化し、ストレス耐性を高める効果があります。人との会話はオキシトシンを分泌させ、孤独感や不安を和らげます。自然の緑を見るだけでもコルチゾールが下がる研究があります。継続することで脳の構造自体が変化します。',
-    points: [
-      '① 4-7-8呼吸法を試す\n→ 迷走神経を刺激し副交感神経をONにする',
-      '② 10〜20分のウォーキング\n→ エンドルフィン放出で気分が改善する',
-      '③ 感謝日記を毎日3行書く\n→ ポジティブ回路が強化され耐性が上がる',
-      '④ 人と話す機会を意識的に作る\n→ オキシトシンが孤独感と不安を和らげる',
-      '⑤ 緑の多い場所に15分いる\n→ 自然環境だけでコルチゾールが低下する研究あり',
-    ],
-    siteUrl: 'health.asoventure.jp',
-    fullUrl: 'https://health.asoventure.jp?utm_source=yt_canvas&utm_campaign=stress_tips',
-    ctaText: '📖 詳しい実践ガイドはこちら→',
-  },
-  {
-    topic: '免疫力を高める食事の5ポイント',
-    title: '免疫専門家が教える食事の5ポイント🥗',
-    narration: '免疫力は食事によって大きく左右されます。今日は腸内環境から免疫を強化するための5つの食事ポイントを解説します。腸は免疫細胞の70%が集まる最大の免疫器官です。発酵食品のヨーグルトや納豆は善玉菌を増やし腸内環境を整えます。ビタミンCは免疫細胞の産生を促進し、ブロッコリーやパプリカが特に豊富です。亜鉛は免疫細胞の分化に不可欠で、牡蠣や肉類に多く含まれます。食物繊維は善玉菌のエサになり、腸内フローラを多様化させます。加工食品と過剰な砂糖は炎症を促進し免疫機能を低下させます。継続的な食習慣の改善が免疫力の底上げにつながります。',
-    points: [
-      '① ヨーグルト・納豆で腸活\n→ 腸は免疫細胞の70%が集まる免疫の中心',
-      '② ブロッコリーでビタミンC補給\n→ 免疫細胞の産生と機能維持に必須',
-      '③ 牡蠣・肉類で亜鉛を摂る\n→ 免疫細胞の分化に不可欠なミネラル',
-      '④ 食物繊維で腸内フローラを多様化\n→ 善玉菌のエサとなり免疫の多様性が上がる',
-      '⑤ 加工食品・過剰な砂糖を控える\n→ 炎症を促進し免疫機能を直接低下させる',
-    ],
-    siteUrl: 'health.asoventure.jp',
-    fullUrl: 'https://health.asoventure.jp?utm_source=yt_canvas&utm_campaign=immunity_tips',
-    ctaText: '📖 免疫強化レシピはこちら→',
-  },
-  {
-    topic: 'メンタルヘルスを整える6つの習慣',
-    title: 'メンタルが安定している人の6つの習慣🌿',
-    narration: 'メンタルが安定している人には共通の習慣があります。今日はそれを6つ紹介します。まず朝日を15分浴びること。セロトニンが産生され体内時計がリセットされます。次に睡眠の質を最優先すること。慢性的な睡眠不足は感情調節能力を著しく低下させます。毎日10分の軽い運動は脳由来神経栄養因子を増加させ抑うつを予防します。人との交流を1日1回以上持つこと。孤独はストレスホルモンを持続的に上昇させます。自分を責めないセルフコンパッションを実践することで、失敗からの回復力が高まります。そして週1回は完全に休む日を作ること。休息は怠慢ではなく必要なメンテナンスです。',
-    points: [
-      '① 朝日を15分浴びてセロトニンを作る\n→ 体内時計リセットと気分安定の基礎',
-      '② 睡眠を最優先する\n→ 不足すると感情調節能力が著しく低下する',
-      '③ 毎日10分の軽い運動\n→ 脳由来神経栄養因子が増え抑うつを予防',
-      '④ 人と話す機会を1日1回以上\n→ 孤独はストレスホルモンを慢性的に上昇させる',
-      '⑤ 自分を責めないセルフコンパッション\n→ 失敗からの回復速度が上がる',
-      '⑥ 週1回は完全休息日を作る\n→ 休息は怠慢でなくパフォーマンスのメンテナンス',
-    ],
-    siteUrl: 'health.asoventure.jp',
-    fullUrl: 'https://health.asoventure.jp?utm_source=yt_canvas&utm_campaign=mental_tips',
-    ctaText: '📖 メンタルケア詳細記事はこちら→',
-  },
-  {
-    topic: 'デジタル疲れの目を守る5習慣',
-    title: '眼科医も推奨するPC疲れ目ケアの5習慣👁️',
-    narration: '1日8時間以上スクリーンを見ている現代人の眼精疲労は深刻です。今日は眼科医も推奨する目の疲れを防ぐ5つの習慣を紹介します。20-20-20ルールは20分ごとに20フィート（6メートル）先を20秒見る方法で、毛様体筋の緊張をほぐします。意識的なまばたきは角膜の乾燥を防ぎ、ドライアイ予防に効果的です。画面の輝度を環境光に合わせることで、目への負担が大幅に軽減されます。蒸しタオルで目を温めると血行が促進され疲労回復が早まります。就寝2時間前のスクリーン制限は睡眠の質を守るためにも必須です。',
-    points: [
-      '① 20分ごとに6m先を20秒見る\n→ 毛様体筋の緊張をリセットする20-20-20ルール',
-      '② 意識的にまばたきを増やす\n→ 角膜の乾燥を防ぎドライアイを予防する',
-      '③ 画面の輝度を環境光に合わせる\n→ 輝度差が大きいほど目への負担が増す',
-      '④ 蒸しタオルで目を温める（5分）\n→ 血行促進で疲労物質を素早く除去',
-      '⑤ 就寝2時間前はスクリーンを閉じる\n→ 目の休養と睡眠の質を同時に守る',
-    ],
-    siteUrl: 'health.asoventure.jp',
-    fullUrl: 'https://health.asoventure.jp?utm_source=yt_canvas&utm_campaign=eye_tips',
-    ctaText: '📖 目のケア詳細はこちら→',
+    fullUrl: 'https://health.asoventure.jp?utm_source=youtube&utm_medium=canvas',
+    ctaText: '📖 詳しい健康記事はこちら→',
+    lang: 'ja',
   },
 ];
 
 export async function GET(req: Request) {
   const phase = new URL(req.url).searchParams.get('phase');
   if (phase !== 'canvas') return NextResponse.json({ error: 'phase=canvas required' }, { status: 400 });
+
   try {
-    const result = await phaseCanvas('health', CANVAS_POOLS[Math.floor(Math.random() * CANVAS_POOLS.length)], CTA);
+    const articles = await fetchLatestArticles('health', 5);
+    let item: CanvasItem;
+
+    if (articles.length > 0) {
+      const article = articles[Math.floor(Math.random() * Math.min(articles.length, 3))];
+      item = await generateCanvasItemFromArticle(article, 'health');
+    } else {
+      console.warn('[health-canvas] RSS取得失敗 → フォールバック使用');
+      item = FALLBACK_ITEMS[Math.floor(Math.random() * FALLBACK_ITEMS.length)];
+    }
+
+    const result = await phaseCanvas('health', item, CTA);
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });

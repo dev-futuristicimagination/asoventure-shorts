@@ -2,8 +2,8 @@
 // ffmpeg-static を使用してVercel serverless環境でFFmpegを実行
 
 import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
-import { getYouTubeToken, uploadToYouTube, postToBuffer } from './youtube';
-import { generateTTS, getTTSDuration } from './tts';
+import { getYouTubeToken, uploadToYouTube, postToBuffer, uploadCaptions, postEngagementComment, addToPlaylist, generateSRT } from './youtube';
+
 import { savePending, loadPending, clearPending } from './github';
 import { generateDynamicContent, notifyDiscord } from './gemini';
 import { generateCanvasVideo } from './canvas';
@@ -168,6 +168,19 @@ export async function phaseB(
   const youtubeUrl = await uploadToYouTube(
     token, finalVideo, pending.title, pending.topic, pending.youtubeDescription, cta
   );
+  const videoId = youtubeUrl.split('v=')[1] ?? '';
+
+  // ① SRT字幕を自動生成・アップロード（無音視聴者向け）
+  if (videoId) {
+    const srt = generateSRT(pending.narration, 15);
+    await uploadCaptions(token, videoId, srt, 'ja').catch(e => console.warn('[Captions]', e));
+
+    // ② 投稿後コメント（いいね・登録・LINE誘導）
+    await postEngagementComment(token, videoId, category).catch(e => console.warn('[Comment]', e));
+
+    // ③ カテゴリ別再生リストに追加
+    await addToPlaylist(token, videoId, category).catch(e => console.warn('[Playlist]', e));
+  }
 
   // Buffer(X)投稿
   await postToBuffer(pending.topic, youtubeUrl, category);
@@ -180,53 +193,7 @@ export async function phaseB(
   return { ok: true, message: msg, youtubeUrl };
 }
 
-async function mixVideoTTS(videoBuffer: Buffer, ttsBuffer: Buffer, ttsDuration: number): Promise<Buffer> {
-  const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
-  const tmpDir = await mkdtemp(join(tmpdir(), 'shorts-'));
-  const bgPath  = join(tmpDir, 'bg.mp4');
-  const ttsPath = join(tmpDir, 'tts.wav');
-  const outPath = join(tmpDir, 'out.mp4');
 
-  await writeFile(bgPath, videoBuffer);
-  await writeFile(ttsPath, ttsBuffer);
-
-  // 【ユーザーフィードバック反映 2026-05-07】
-  // ① Veo3のキャラ音声はミュート（TTSナレーションと重複するため）
-  // ② BGMをlavfiサイン波で生成して追加（アンビエント感）
-  // ③ TTS(1:a) のみを聴かせる構成
-  //
-  // BGM: 和音(A=220Hz + E=329Hz + A=440Hz) + エコーでアンビエント感を演出
-  // Volume: BGM 8% + TTS 100% でナレーションを前に出す
-  await execFileAsync(ffmpeg, [
-    '-y',
-    // Input 0: アンビエントBGM（lavfi生成・外部ファイル不要）
-    '-f', 'lavfi',
-    '-i', `aevalsrc='0.25*sin(2*PI*220*t)+0.18*sin(2*PI*329.6*t)+0.12*sin(2*PI*440*t)+0.08*sin(2*PI*523.3*t):c=stereo:s=44100'`,
-    // Input 1: Veo3動画（映像のみ使用、音声はミュート）
-    '-i', bgPath,
-    // Input 2: TTS（ナレーション）
-    '-i', ttsPath,
-    '-filter_complex', [
-      // 映像: 9:16縦型にクロップ
-      '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[vid]',
-      // BGMにエコー（アンビエント風）
-      '[0:a]aecho=0.6:0.7:50|80:0.15|0.1,volume=0.08[bgm]',
-      // BGM + TTS ミックス（TTSを主役に）
-      '[bgm][2:a]amix=inputs=2:duration=shortest:weights=0.3 1[aout]',
-    ].join(';'),
-    '-map', '[vid]',
-    '-map', '[aout]',
-    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-    '-c:a', 'aac', '-b:a', '192k',
-    '-t', String(ttsDuration + 0.5),
-    '-movflags', '+faststart',
-    outPath,
-  ], { maxBuffer: 512 * 1024 * 1024 });
-
-  const result = await readFile(outPath);
-  await rm(tmpDir, { recursive: true }).catch(() => {});
-  return result;
-}
 // ─── Veo3動画 + BGMのみミックス（TTS不要版）────────────────────────
 // Veo3がキャラ音声を内包するため、BGMを重ねるだけでOK
 async function mixVideoWithBGM(videoBuffer: Buffer): Promise<Buffer> {
