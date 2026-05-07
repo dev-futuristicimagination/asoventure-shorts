@@ -1,0 +1,10 @@
+{
+  "category": "cheese",
+  "topic": "ガクチカ作成の悩み",
+  "title": "バイトしかない？AIがガクチカに変えます🧀",
+  "narration": "バイト経験しかない…大丈夫！AIが自動でガクチカ作成。普通の経験もESで光る！LINEで無料体験。今すぐCheese LINE登録！",
+  "youtubeDescription": "ガクチカ作成、バイト経験しかないと悩んでいませんか？普通の経験でもESで光る書き方、Cheese AIが解決します。あなたのエピソードが魅力的なガクチカに大変身。今すぐLINEで無料体験！Cheese LINE登録で、内定を勝ち取ろう！",
+  "videoPrompt": "Opening thumbnail frame: 2.5D anime style VTuber character \"Map-kun\": young male black cat, jet-black fur with white chest patch, navy blue explorer jacket with golden compass badge, khaki cargo shorts, black cat ears with inner gold, compass accessory, Cheese-yellow color accent. Bright confident expression. 9:16 vertical YouTube Shorts format. looking at blank paper worried, bold white text \"バイトしかなくても大丈夫！\" at top. Scene: Map-kun opens LINE, types \"バイトしかありません\", AI magic transforms it into glowing golden essay text. He reads it and tears up with joy. Warm golden light effect.",
+  "operationName": "models/veo-3.0-generate-001/operations/plh1zh4v38z4",
+  "createdAt": "2026-05-07T07:51:08.282Z"
+}
