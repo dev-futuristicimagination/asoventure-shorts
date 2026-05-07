@@ -11,6 +11,9 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { generateTTS, getTTSDuration } from './tts';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ffmpegPath: string = require('ffmpeg-static') as string;
+
 const execFileAsync = promisify(execFile);
 
 // カテゴリ別カラーパレット（グラジエント背景）
@@ -38,7 +41,7 @@ export interface CanvasOptions {
 }
 
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
-  const ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
+  const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const theme = CANVAS_THEME[opts.category] || CANVAS_THEME.health;
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
 

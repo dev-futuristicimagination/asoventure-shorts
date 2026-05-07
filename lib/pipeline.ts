@@ -1,4 +1,5 @@
 // lib/pipeline.ts — Phase A / Phase B 共通パイプライン + Canvas（テキスト動画）
+// ffmpeg-static を使用してVercel serverless環境でFFmpegを実行
 
 import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
 import { getYouTubeToken, uploadToYouTube, postToBuffer } from './youtube';
@@ -14,6 +15,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 const execFileAsync = promisify(execFile);
+
+// ffmpeg-static: Vercel環境でもFFmpegバイナリが使える
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ffmpegPath: string = require('ffmpeg-static') as string;
 
 // Phase A: Veo3リクエスト → pending.json保存
 export async function phaseA(
@@ -81,7 +86,7 @@ export async function phaseB(
 }
 
 async function mixVideoTTS(videoBuffer: Buffer, ttsBuffer: Buffer, ttsDuration: number): Promise<Buffer> {
-  const ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
+  const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const tmpDir = await mkdtemp(join(tmpdir(), 'shorts-'));
   const bgPath  = join(tmpDir, 'bg.mp4');
   const ttsPath = join(tmpDir, 'tts.wav');
