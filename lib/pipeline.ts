@@ -172,6 +172,7 @@ export async function phaseCanvas(
       points: item.points,
       narration: item.narration,
       siteUrl: item.siteUrl,
+      fullUrl: item.fullUrl,
       ctaText: item.ctaText,
       lang: item.lang ?? 'ja',
     });
