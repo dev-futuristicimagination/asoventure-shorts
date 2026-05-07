@@ -1,0 +1,19 @@
+{
+  "framework": "nextjs",
+  "crons": [
+    { "path": "/api/cheese?phase=a", "schedule": "0 11 * * *" },
+    { "path": "/api/cheese?phase=b", "schedule": "20 11 * * *" },
+    { "path": "/api/job?phase=a",    "schedule": "5 11 * * *" },
+    { "path": "/api/job?phase=b",    "schedule": "25 11 * * *" },
+    { "path": "/api/health?phase=a", "schedule": "10 11 * * *" },
+    { "path": "/api/health?phase=b", "schedule": "30 11 * * *" },
+    { "path": "/api/finance?phase=a","schedule": "15 11 * * *" },
+    { "path": "/api/finance?phase=b","schedule": "35 11 * * *" },
+    { "path": "/api/education?phase=a","schedule": "20 11 * * *" },
+    { "path": "/api/education?phase=b","schedule": "40 11 * * *" },
+    { "path": "/api/life?phase=a",   "schedule": "25 11 * * *" },
+    { "path": "/api/life?phase=b",   "schedule": "45 11 * * *" },
+    { "path": "/api/music1963?phase=a","schedule": "30 11 * * *" },
+    { "path": "/api/music1963?phase=b","schedule": "50 11 * * *" }
+  ]
+}
