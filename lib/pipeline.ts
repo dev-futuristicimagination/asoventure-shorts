@@ -20,6 +20,28 @@ const execFileAsync = promisify(execFile);
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ffmpegPath: string = require('ffmpeg-static') as string;
 
+// ─── Veo3送信前プロンプト自動サニタイズ ─────────────────────────────
+// 【ユーザーフィードバック 2026-05-07】
+// Veo3は日本語テキストを描画できない → 文字化けになる
+// → video promptから日本語テキストオーバーレイ指定を除去
+// → 「bold text "..."」「at top / at bottom」指定も除去
+// → 視覚的なシーン描写のみ残す
+function sanitizeVideoPrompt(prompt: string): string {
+  return prompt
+    // 「bold white/text "..."」パターンを除去（英語・日本語両対応）
+    .replace(/,?\s*bold\s+(?:white\s+)?text\s+['"][^'"]*['"]/gi, '')
+    // 「at top / at bottom / at center」テキスト位置指定を除去
+    .replace(/,?\s*(?:text\s+)?at\s+(?:top|bottom|center)\s+of\s+(?:screen|frame)?/gi, '')
+    // テキストオーバーレイ全体の指示文を除去
+    .replace(/,?\s*overlay\s+text[^.]*\./gi, '.')
+    // 「Opening thumbnail frame: ...」を「Opening scene:」に変換（テキスト指定なし）
+    .replace(/Opening thumbnail frame:/gi, 'Opening scene:')
+    // 連続カンマ・スペースをクリーンアップ
+    .replace(/,\s*,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // Phase A: Veo3リクエスト → pending.json保存
 export async function phaseA(
   category: string,
@@ -34,11 +56,13 @@ export async function phaseA(
     item.topic, item.narration, category
   );
 
-  const operationName = await requestVeo3(item.videoPrompt);
+  // 日本語テキストオーバーレイをサニタイズしてからVeo3に送信
+  const cleanPrompt = sanitizeVideoPrompt(item.videoPrompt);
+  const operationName = await requestVeo3(cleanPrompt);
 
   const pending: PendingData = {
     category, topic: item.topic, title: item.title,
-    narration, youtubeDescription, videoPrompt: item.videoPrompt,
+    narration, youtubeDescription, videoPrompt: cleanPrompt,
     operationName, createdAt: new Date().toISOString(),
   };
   await savePending(category, pending);
@@ -95,11 +119,30 @@ async function mixVideoTTS(videoBuffer: Buffer, ttsBuffer: Buffer, ttsDuration: 
   await writeFile(bgPath, videoBuffer);
   await writeFile(ttsPath, ttsBuffer);
 
+  // 【ユーザーフィードバック反映 2026-05-07】
+  // ① Veo3のキャラ音声はミュート（TTSナレーションと重複するため）
+  // ② BGMをlavfiサイン波で生成して追加（アンビエント感）
+  // ③ TTS(1:a) のみを聴かせる構成
+  //
+  // BGM: 和音(A=220Hz + E=329Hz + A=440Hz) + エコーでアンビエント感を演出
+  // Volume: BGM 8% + TTS 100% でナレーションを前に出す
   await execFileAsync(ffmpeg, [
     '-y',
+    // Input 0: アンビエントBGM（lavfi生成・外部ファイル不要）
+    '-f', 'lavfi',
+    '-i', `aevalsrc='0.25*sin(2*PI*220*t)+0.18*sin(2*PI*329.6*t)+0.12*sin(2*PI*440*t)+0.08*sin(2*PI*523.3*t):c=stereo:s=44100'`,
+    // Input 1: Veo3動画（映像のみ使用、音声はミュート）
     '-i', bgPath,
+    // Input 2: TTS（ナレーション）
     '-i', ttsPath,
-    '-filter_complex', '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[vid];[0:a]volume=0.2[bgaudio];[bgaudio][1:a]amix=inputs=2:duration=shortest:normalize=0[aout]',
+    '-filter_complex', [
+      // 映像: 9:16縦型にクロップ
+      '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[vid]',
+      // BGMにエコー（アンビエント風）
+      '[0:a]aecho=0.6:0.7:50|80:0.15|0.1,volume=0.08[bgm]',
+      // BGM + TTS ミックス（TTSを主役に）
+      '[bgm][2:a]amix=inputs=2:duration=shortest:weights=0.3 1[aout]',
+    ].join(';'),
     '-map', '[vid]',
     '-map', '[aout]',
     '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
