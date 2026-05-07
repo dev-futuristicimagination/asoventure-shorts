@@ -1,11 +1,5 @@
 // lib/articles.ts — 各サービスサイトから実際の記事を取得
-// 【2026-05-07 設計修正】
-// 正しいオウンドメディア戦略:
-//   ① サイトの実際の記事をRSS/sitemapから取得
-//   ② 記事内容をAIで要約して動画ナレーション生成
-//   ③ CTAはその記事の実URLにリンク → 整合性100%
-//
-// これにより「うその宣言」が完全に解消される
+import type { CanvasItem } from './types';
 
 // ── Gemini APIで記事→CanvasItem変換 ─────────────────────────────────
 async function callGemini(prompt: string): Promise<string> {
@@ -101,8 +95,6 @@ export async function generateCanvasItemFromArticle(
   article: FetchedArticle,
   category: string
 ): Promise<CanvasItem> {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const prompt = `
 以下の記事を元に、YouTube Shorts用のCanvas動画コンテンツを日本語で生成してください。
@@ -130,8 +122,7 @@ export async function generateCanvasItemFromArticle(
 - 「〇〇ができます」という約束は記事に書いてある内容のみ
 `;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
+  const text = (await callGemini(prompt)).trim();
 
   // JSONパース
   const jsonMatch = text.match(/\{[\s\S]+\}/);
