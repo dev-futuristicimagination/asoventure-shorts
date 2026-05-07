@@ -1,10 +1,10 @@
 {
   "category": "education",
-  "topic": "プログラミング独学",
-  "title": "プログラミング独学ロードマップ！エデュさが解説💻",
-  "narration": "プログラミング独学、何から始める？王道はHTML/CSS→JS→React。無料教材で十分！エデュさが教える30秒学習tips！チャンネル登録で毎日tips！",
-  "youtubeDescription": "プログラミング独学、何から始めたら良いか悩んでいませんか？この動画では、未経験からでも最短でスキルを身につける王道ルートを解説。HTML/CSSからJavaScript、そしてReactへ。費用をかけずに学べる無料教材も紹介します。キャリアアップを目指す20代・就活生・若手社会人必見！「エデュさが」の学習tipsで、あなたのスキルアップを強力サポート。チャンネル登録で、毎日役立つ情報をゲットしましょう！",
-  "videoPrompt": "Opening thumbnail frame: 2.5D anime VTuber \"Edu-sa\": female rabbit, white fur, long bunny ears, lavender twin-tails, gold-rimmed glasses, purple cardigan, holds books and pencil. Studious expression. 9:16 vertical. with coding screen, bold white text \"プログラミング独学ロードマップ！\". Scene: glowing roadmap HTML→JS→React, each milestone lighting up.",
-  "operationName": "models/veo-3.0-generate-001/operations/case6mdlkbnw",
-  "createdAt": "2026-05-07T07:52:01.493Z"
+  "topic": "TOEIC800点への道",
+  "title": "TOEIC800点の人がやっていること3つ📖エデュさ",
+  "narration": "TOEIC800点、夢じゃない！毎日30分公式問題集を繰り返す。たったこれだけで3ヶ月で劇的に伸びる！チャンネル登録で毎日tips！",
+  "youtubeDescription": "「TOEIC800点」は就活やキャリアアップに必須。でも、どうすれば？実は、毎日30分「公式問題集」を徹底的に繰り返すのが最短ルートなんです。3ヶ月で驚くほどスコアが伸び、あなたの未来が変わります。今すぐ実践！チャンネル登録で毎日役立つ学習tipsをゲット！",
+  "videoPrompt": "Opening thumbnail frame: 2.5D anime VTuber \"Edu-sa\": female rabbit, white fur, long bunny ears, lavender twin-tails, gold-rimmed glasses, purple cardigan, holds books and pencil. Studious expression. 9:16 vertical. holding TOEIC certificate, bold white text \"TOEIC800点の秘密！\". Scene: 3 study habits on sparkle cards, score meter rising. Library setting.",
+  "operationName": "models/veo-3.0-generate-001/operations/yfnam6gc3hb9",
+  "createdAt": "2026-05-07T11:20:54.466Z"
 }
