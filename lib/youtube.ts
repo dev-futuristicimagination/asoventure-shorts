@@ -25,15 +25,31 @@ export async function uploadToYouTube(
   description: string,
   cta: CtaConfig
 ): Promise<string> {
+  // AI開示文（YouTube 2024年ポリシー準拠）
+  // AI生成コンテンツの開示義務：現実的に見えるAI生成コンテンツには必須
+  // アニメ調でも開示しておくことでBAN/ポリシー違反リスクを最小化する
+  const AI_DISCLOSURE = [
+    '',
+    '────────────────',
+    '【制作情報】この動画はAI（Veo3・Gemini）を使用して生成されています。',
+    'Made with AI: Veo3 (Google DeepMind) + Gemini TTS',
+    '────────────────',
+  ].join('\n');
+
   const metadata = {
     snippet: {
       title: `${title} #Shorts`.slice(0, 100),
-      description: [topic, '', description, '', ...cta.block].join('\n'),
+      description: [topic, '', description, AI_DISCLOSURE, '', ...cta.block].join('\n'),
       tags: cta.tags,
       categoryId: cta.ytCategoryId,
       defaultLanguage: 'ja',
     },
-    status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+    status: {
+      privacyStatus: 'public',
+      selfDeclaredMadeForKids: false,
+      // YouTube 2024ポリシー: AIで生成された現実的コンテンツの開示
+      // アニメ/明らかにAI生成なら不要だが、開示しておくことでリスクゼロに
+    },
   };
   const form = new FormData();
   form.append('snippet', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
