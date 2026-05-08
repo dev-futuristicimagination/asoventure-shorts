@@ -317,31 +317,16 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
     ],
   });
 
-  // @resvg/resvg-wasm で SVG → PNG 変換
+  // sharp（Next.js標準バンドル・rsvg内蔵）で SVG → PNG 変換
+  // @resvg/resvg-wasm はWASM初期化問題があるためsharpに切り替え
+  // sharp は Vercel Linux 環境で確実に動作する
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const resvgModule = require('@resvg/resvg-wasm') as typeof import('@resvg/resvg-wasm');
+  const sharp = require('sharp') as typeof import('sharp');
+  const pngBuf = await sharp(Buffer.from(svg))
+    .resize(1080, 1920, { fit: 'fill' })
+    .png()
+    .toBuffer();
 
-  // WASM 初期化（初回のみ・グローバルフラグで管理）
-  if (!(globalThis as Record<string, unknown>).__resvgInitialized) {
-    const { readFileSync } = await import('fs');
-    // require.resolve ではなく node_modules からの相対パスで解決（Vercel対応）
-    const wasmPaths = [
-      join(process.cwd(), 'node_modules', '@resvg', 'resvg-wasm', 'index_bg.wasm'),
-      join(__dirname, '..', 'node_modules', '@resvg', 'resvg-wasm', 'index_bg.wasm'),
-    ];
-    let wasmBuf: Buffer | null = null;
-    for (const p of wasmPaths) {
-      try { wasmBuf = readFileSync(p); break; } catch { continue; }
-    }
-    if (!wasmBuf) throw new Error('resvg-wasm: index_bg.wasm not found');
-    await resvgModule.initWasm(wasmBuf);
-    (globalThis as Record<string, unknown>).__resvgInitialized = true;
-    console.log('[FrameGen] resvg-wasm WASM初期化完了');
-  }
-
-  const resvg = new resvgModule.Resvg(svg, {
-    fitTo: { mode: 'width' as const, value: 1080 },
-  });
-  const pngData = resvg.render();
-  return Buffer.from(pngData.asPng());
+  console.log(`[FrameGen] PNG生成完了: ${pngBuf.length} bytes`);
+  return pngBuf;
 }
