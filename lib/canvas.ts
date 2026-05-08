@@ -169,10 +169,9 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       ? bgImgPathRaw.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:')
       : null;
 
-    // 静止オーバーレイ（透明度低め）
-    const bgMovieFilter = bgImgPath
-      ? `movie='${bgImgPath}',scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=rgba,colorchannelmixer=aa=0.15[bgimg];[0:v][bgimg]overlay=0:0[base]`
-      : `[0:v]copy[base]`;
+    // 背景画像オーバーレイ: Vercel環境ではpublic/images/bgが含まれないため常にnull
+    // movie フィルターはVercel Linuxのffmpeg-staticで動作しないことがあるため使わない
+    const bgMovieFilter = '[0:v]copy[base]';
 
     // ── スライドタイミング計算 ──────────────────────────────────────
     const points = opts.points.slice(0, 4); // 最大4ポイント
