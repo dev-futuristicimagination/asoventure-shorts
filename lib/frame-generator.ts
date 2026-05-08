@@ -318,17 +318,25 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
   });
 
   // @resvg/resvg-wasm で SVG → PNG 変換
-  // WASM モジュールの初期化が必要（一度だけ実行）
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const resvgModule = require('@resvg/resvg-wasm') as typeof import('@resvg/resvg-wasm');
-  // initWasm を初回のみ実行（2回目以降は既に初期化済み）
-  try {
-    const wasmPath = require.resolve('@resvg/resvg-wasm/index_bg.wasm');
+
+  // WASM 初期化（初回のみ・グローバルフラグで管理）
+  if (!(globalThis as Record<string, unknown>).__resvgInitialized) {
     const { readFileSync } = await import('fs');
-    const wasmBuf = readFileSync(wasmPath);
+    // require.resolve ではなく node_modules からの相対パスで解決（Vercel対応）
+    const wasmPaths = [
+      join(process.cwd(), 'node_modules', '@resvg', 'resvg-wasm', 'index_bg.wasm'),
+      join(__dirname, '..', 'node_modules', '@resvg', 'resvg-wasm', 'index_bg.wasm'),
+    ];
+    let wasmBuf: Buffer | null = null;
+    for (const p of wasmPaths) {
+      try { wasmBuf = readFileSync(p); break; } catch { continue; }
+    }
+    if (!wasmBuf) throw new Error('resvg-wasm: index_bg.wasm not found');
     await resvgModule.initWasm(wasmBuf);
-  } catch {
-    // 既に初期化済みの場合はエラーを無視
+    (globalThis as Record<string, unknown>).__resvgInitialized = true;
+    console.log('[FrameGen] resvg-wasm WASM初期化完了');
   }
 
   const resvg = new resvgModule.Resvg(svg, {
