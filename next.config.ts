@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
       './node_modules/ffmpeg-static/**',
       './public/fonts/**',
       './public/audio/bgm/**',
+      './public/images/bg/**',
     ],
   },
 };

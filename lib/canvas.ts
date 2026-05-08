@@ -90,23 +90,47 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     const outPath = join(tmpDir, 'canvas.mp4');
     await writeFile(ttsPath, ttsBuffer);
 
-    // OGP画像の取得を試みる
+    // ── 背景画像の決定（優先順位）──────────────────────────────────────────
+    // 1. public/images/bg/{category}.png（バンドル済み・確実）
+    // 2. 記事OGP画像URL（外部取得・失敗しやすい）
+    // 3. カラー背景フォールバック
     let hasImage = false;
-    if (opts.bgImageUrl) {
+    const { existsSync } = await import('fs');
+
+    // 優先1: バンドル済みカテゴリ背景画像（Vercel /var/task/public/images/bg/）
+    const staticBgPath = join(process.cwd(), 'public', 'images', 'bg', `${opts.category}.png`);
+    if (existsSync(staticBgPath)) {
+      // 静的ファイルをtmpDirにコピー（FFmpegはtmpファイルを期待）
+      const { copyFile } = await import('fs/promises');
+      await copyFile(staticBgPath, bgImgPath);
+      hasImage = true;
+      console.log(`[Canvas] 静的BG画像使用: ${staticBgPath}`);
+    }
+
+    // 優先2: 記事OGP画像URL（バンドル画像がない場合のみ試みる）
+    if (!hasImage && opts.bgImageUrl) {
       try {
         const imgRes = await fetch(opts.bgImageUrl, {
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(6000),
           headers: { 'User-Agent': 'AsoventureBot/1.0' },
         });
         if (imgRes.ok) {
-          const imgBuf = await imgRes.arrayBuffer();
-          await writeFile(bgImgPath, Buffer.from(imgBuf));
-          hasImage = true;
-          console.log(`[Canvas] OGP画像を取得: ${opts.bgImageUrl}`);
+          const ct = imgRes.headers.get('content-type') || '';
+          // 画像レスポンスのみ受け入れ（HTMLエラーページを除外）
+          if (ct.startsWith('image/')) {
+            const imgBuf = await imgRes.arrayBuffer();
+            await writeFile(bgImgPath, Buffer.from(imgBuf));
+            hasImage = true;
+            console.log(`[Canvas] 記事OGP画像取得: ${opts.bgImageUrl}`);
+          }
         }
       } catch (e) {
         console.warn(`[Canvas] OGP画像取得失敗: ${e}`);
       }
+    }
+
+    if (!hasImage) {
+      console.log(`[Canvas] 画像なし → カラー背景フォールバック`);
     }
 
     // ── ブランドオーバーレイフィルター（drawboxのみ）──────────────────────
