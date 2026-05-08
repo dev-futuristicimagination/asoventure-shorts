@@ -1,4 +1,4 @@
-// lib/canvas.ts — テキスト動画生成 v5「シンプル左寄せスライド方式」
+﻿// lib/canvas.ts — テキスト動画生成 v5「シンプル左寄せスライド方式」
 // 【設計変更 v5】参照動画スタイルに合わせてシンプル化
 // - 背景: 単色グラデーション静止（軌道パン・色呼吸を廃止）
 // - テキスト: 左寄せ（x=80固定）
@@ -26,7 +26,10 @@ const execFileAsync = promisify(execFile);
 function getFFmpegFontPath(): string {
   const raw = process.env.CANVAS_FONT_PATH ||
     join(process.cwd(), 'public', 'fonts', 'NotoSansJP-Regular.ttf');
-  return raw.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:');
+  if (process.platform === 'win32') {
+    return raw.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:');
+  }
+  return raw.replace(/\\/g, '/'); // Linux/Vercel
 }
 
 export const CANVAS_THEME: Record<string, {
