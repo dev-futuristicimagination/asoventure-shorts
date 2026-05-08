@@ -318,9 +318,20 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
   });
 
   // @resvg/resvg-wasm で SVG → PNG 変換
+  // WASM モジュールの初期化が必要（一度だけ実行）
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Resvg } = require('@resvg/resvg-wasm') as typeof import('@resvg/resvg-wasm');
-  const resvg = new Resvg(svg, {
+  const resvgModule = require('@resvg/resvg-wasm') as typeof import('@resvg/resvg-wasm');
+  // initWasm を初回のみ実行（2回目以降は既に初期化済み）
+  try {
+    const wasmPath = require.resolve('@resvg/resvg-wasm/index_bg.wasm');
+    const { readFileSync } = await import('fs');
+    const wasmBuf = readFileSync(wasmPath);
+    await resvgModule.initWasm(wasmBuf);
+  } catch {
+    // 既に初期化済みの場合はエラーを無視
+  }
+
+  const resvg = new resvgModule.Resvg(svg, {
     fitTo: { mode: 'width' as const, value: 1080 },
   });
   const pngData = resvg.render();
