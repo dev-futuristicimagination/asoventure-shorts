@@ -214,7 +214,7 @@ export async function postToBuffer(topic: string, youtubeUrl: string, category: 
 export async function postArticleToBuffer(xPostText: string): Promise<boolean> {
   const token = process.env.BUFFER_ACCESS_TOKEN || '';
   const channelId = process.env.BUFFER_CHANNEL_ID || '69e04b4f031bfa423c0b5e18';
-  if (!token) return false;
+  if (!token) { console.warn('[Buffer] BUFFER_ACCESS_TOKEN未設定'); return false; }
   const res = await fetch('https://api.buffer.com/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -222,6 +222,12 @@ export async function postArticleToBuffer(xPostText: string): Promise<boolean> {
       query: `mutation { createPost(input: { text: ${JSON.stringify(xPostText)}, channelId: "${channelId}", schedulingType: automatic, mode: addToQueue }) { ... on PostActionSuccess { post { id } } ... on MutationError { message } } }`,
     }),
   });
-  const json = await res.json() as { errors?: unknown; data?: { createPost?: { message?: string } } };
-  return !json.errors && !json.data?.createPost?.message;
+  const json = await res.json() as { errors?: unknown; data?: { createPost?: { message?: string; post?: { id: string } } } };
+  const ok = !json.errors && !json.data?.createPost?.message;
+  if (!ok) {
+    console.warn('[Buffer] 投稿失敗:', JSON.stringify(json).slice(0, 300));
+  } else {
+    console.log('[Buffer] 投稿成功:', json.data?.createPost?.post?.id);
+  }
+  return ok;
 }
