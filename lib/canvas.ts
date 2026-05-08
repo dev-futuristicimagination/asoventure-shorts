@@ -55,6 +55,12 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
+// r,g,b を #RRGGBB 形式に変換（ffmpegは rgb() 記法非対応）
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  return '#' + [clamp(r), clamp(g), clamp(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
 // ── Canvas動画生成 v7 ─────────────────────────────────────────────────────
 // 完全 drawbox ベース（drawtext不使用）のブランドビジュアル動画
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
@@ -113,7 +119,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     // bg2色の横ストライプ（縦に等間隔・背景に奥行き感）
     for (let i = 0; i < 6; i++) {
       const y = 80 + i * 280;
-      const shade = `rgb(${Math.min(255, bR + 15)}\\,${Math.min(255, bG + 15)}\\,${Math.min(255, bB + 15)})`;
+      const shade = rgbToHex(bR + 15, bG + 15, bB + 15);
       addBox('0', String(y), '1080', '120', shade, 0.18);
     }
 
@@ -136,7 +142,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     }
 
     // 中央の大きなブランドボックス（題名エリア・半透明）
-    const midColor = `rgb(${Math.min(255, aR - 30)}\\,${Math.min(255, aG - 30)}\\,${Math.min(255, aB - 30)})`;
+    const midColor = rgbToHex(aR - 30, aG - 30, aB - 30);
     addBox('40', '200', '1000', '180', midColor, 0.25);
 
     // 中央アクセントライン（3本）
@@ -144,7 +150,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     addBox('40', '375', '1000', '3', accentHex, 0.60);
 
     // 下部CTAボックス（半透明）
-    const ctaColor = `rgb(${Math.min(255, aR + 20)}\\,${Math.min(255, aG + 20)}\\,${Math.min(255, aB + 20)})`;
+    const ctaColor = rgbToHex(aR + 20, aG + 20, aB + 20);
     addBox('40', '1650', '1000', '220', ctaColor, 0.15);
     addBox('40', '1650', '6', '220', accentHex, 0.85);
 
