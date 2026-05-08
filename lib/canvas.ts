@@ -1,14 +1,14 @@
-// lib/canvas.ts — テキスト動画生成 v6「drawtext不使用版」
-// 【2026-05-08 重大発見】Vercel Linux の ffmpeg-static v7.0.2 には drawtext フィルターが含まれない
-// （libfreetype/libfontconfig未バンドル）
-// → v6: drawtext を完全廃止 → TTS音声 + カラーバーパターン動画のみ生成
-// → テキスト情報は YouTube タイトル/説明文で提供（音声ナレーション付き）
+// lib/canvas.ts — Canvas動画生成 v7「カラーパルス可視化版」
+// 【2026-05-08 プロデューサー判断】
+// drawtext (libfreetype未バンドル) が使えないVercel Linux環境のため
+// drawbox のみで高品質な見た目を実現する
 //
-// 生成される動画:
-//   - 背景: カテゴリカラーの単色 (1080x1920 縦型)
-//   - アクセントバー: 上部と下部に細いカラーライン
-//   - 尺: TTS長さに依存（最大15秒）
-//   - 音声: Google TTS ナレーションのみ
+// ビジュアル設計:
+//   - カテゴリグラデーション風ストライプ（明るめ）
+//   - 音声に合わせて見えるパルスバー（固定タイミングで疑似表現）
+//   - ブランドカラーのアクセントライン複数本
+//   - プログレスバー（下部）
+//   - 全体的に「見える動画」に
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -24,14 +24,14 @@ const execFileAsync = promisify(execFile);
 export const CANVAS_THEME: Record<string, {
   bg1: string; bg2: string; bgSlide: string; accent: string; textColor: string; emoji: string; siteName: string;
 }> = {
-  health:    { bg1: '0x0D2B1F', bg2: '0x1B4332', bgSlide: '0x0A1F17', accent: '0x74C69D', textColor: 'white', emoji: '💚', siteName: 'asoventure HEALTH' },
-  finance:   { bg1: '0x080818', bg2: '0x1A1A2E', bgSlide: '0x05050F', accent: '0xF5A623', textColor: 'white', emoji: '💰', siteName: 'asoventure FINANCE' },
-  education: { bg1: '0x1A0F3D', bg2: '0x2D1B69', bgSlide: '0x100A28', accent: '0x7EC8E3', textColor: 'white', emoji: '📚', siteName: 'asoventure EDUCATION' },
-  life:      { bg1: '0x0A2E38', bg2: '0x134E5E', bgSlide: '0x061E25', accent: '0xFFD166', textColor: 'white', emoji: '🌱', siteName: 'asoventure LIFE' },
-  japan:     { bg1: '0x5C0A00', bg2: '0x8B0000', bgSlide: '0x3A0600', accent: '0xFFFFFF', textColor: 'white', emoji: '⛩️', siteName: 'asoventure JAPAN' },
-  job:       { bg1: '0x080F18', bg2: '0x0F2027', bgSlide: '0x040810', accent: '0xF5A623', textColor: 'white', emoji: '💼', siteName: 'asoventure JOB' },
-  cheese:    { bg1: '0x100600', bg2: '0x2A1500', bgSlide: '0x080300', accent: '0xFFD700', textColor: 'white', emoji: '🧀', siteName: 'Asoventure Cheese' },
-  music1963: { bg1: '0x0D0020', bg2: '0x1A0533', bgSlide: '0x060015', accent: '0xF8BBD0', textColor: 'white', emoji: '🎵', siteName: 'music1963' },
+  health:    { bg1: '#1B4332', bg2: '#0D2B1F', bgSlide: '#0A1F17', accent: '#74C69D', textColor: 'white', emoji: '💚', siteName: 'asoventure HEALTH' },
+  finance:   { bg1: '#1A1A2E', bg2: '#080818', bgSlide: '#05050F', accent: '#F5A623', textColor: 'white', emoji: '💰', siteName: 'asoventure FINANCE' },
+  education: { bg1: '#2D1B69', bg2: '#1A0F3D', bgSlide: '#100A28', accent: '#7EC8E3', textColor: 'white', emoji: '📚', siteName: 'asoventure EDUCATION' },
+  life:      { bg1: '#134E5E', bg2: '#0A2E38', bgSlide: '#061E25', accent: '#FFD166', textColor: 'white', emoji: '🌱', siteName: 'asoventure LIFE' },
+  japan:     { bg1: '#8B0000', bg2: '#5C0A00', bgSlide: '#3A0600', accent: '#FFFFFF', textColor: 'white', emoji: '⛩️', siteName: 'asoventure JAPAN' },
+  job:       { bg1: '#0F2027', bg2: '#080F18', bgSlide: '#040810', accent: '#F5A623', textColor: 'white', emoji: '💼', siteName: 'asoventure JOB' },
+  cheese:    { bg1: '#2A1500', bg2: '#100600', bgSlide: '#080300', accent: '#FFD700', textColor: 'white', emoji: '🧀', siteName: 'Asoventure Cheese' },
+  music1963: { bg1: '#1A0533', bg2: '#0D0020', bgSlide: '#060015', accent: '#F8BBD0', textColor: 'white', emoji: '🎵', siteName: 'music1963' },
 };
 
 export interface CanvasOptions {
@@ -45,18 +45,33 @@ export interface CanvasOptions {
   lang?: 'ja' | 'en';
 }
 
-// ── Canvas動画生成 v6 (drawtext不使用・Vercel互換) ──────────────────────────
+// hex色を r/g/b 成分に分解（drawbox用）
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace(/^#|^0x/, '');
+  return {
+    r: parseInt(clean.slice(0, 2), 16),
+    g: parseInt(clean.slice(2, 4), 16),
+    b: parseInt(clean.slice(4, 6), 16),
+  };
+}
+
+// ── Canvas動画生成 v7 ─────────────────────────────────────────────────────
+// 完全 drawbox ベース（drawtext不使用）のブランドビジュアル動画
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
   const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const theme = CANVAS_THEME[opts.category] || CANVAS_THEME.health;
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
 
-  // hex color: 0x → # 変換（ffmpeg lavfi互換）
-  const bg = theme.bg1.replace(/^0x/, '#');
-  const ac = theme.accent.replace(/^0x/, '#');
+  // 背景色（# プレフィックス形式）
+  const bgColor = theme.bg1.startsWith('#') ? theme.bg1 : '#' + theme.bg1.replace('0x', '');
+  const accentHex = theme.accent.startsWith('#') ? theme.accent : '#' + theme.accent.replace('0x', '');
+  const { r: aR, g: aG, b: aB } = hexToRgb(accentHex);
+
+  // 少し明るい背景 (bg2 を bg1 と混合した擬似グラデーション)
+  const bg2Hex = theme.bg2.startsWith('#') ? theme.bg2 : '#' + theme.bg2.replace('0x', '');
+  const { r: bR, g: bG, b: bB } = hexToRgb(bg2Hex);
 
   try {
-    // TTS 音声生成
     const ttsBuffer = await generateTTS(opts.narration);
     const duration = Math.min(Math.max(getTTSDuration(ttsBuffer), 10), 15);
 
@@ -64,34 +79,92 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     const outPath = join(tmpDir, 'canvas.mp4');
     await writeFile(ttsPath, ttsBuffer);
 
-    // アクセントカラーのHEXを数値に分解（drawbox用）
-    const accHex = theme.accent.replace(/^0x/, '');
-    const accR = parseInt(accHex.slice(0, 2), 16);
-    const accG = parseInt(accHex.slice(2, 4), 16);
-    const accB = parseInt(accHex.slice(4, 6), 16);
-    const accColor = `${accR}/${accG}/${accB}`;
+    // ── フィルター構築（drawbox のみ）──────────────────────────────────
+    // 縦型 1080x1920 のビジュアル設計:
+    //   上部ブランドバー（16px）
+    //   中央部: 横ストライプ（bg2色ブロック）
+    //   パルスバー: 時間経過で幅が変化するバー群（音声の存在感を演出）
+    //   下部プログレスバー（8px）
+    //   左右アクセントライン（4px）
 
-    // フィルター: drawbox のみ（drawtext不使用）
-    // 上部アクセントバー + 下部アクセントバー + プログレスバー
-    const filterComplex = [
-      // 背景 → [base]
-      '[0:v]copy[base]',
-      // 上部バー (8px)
-      `[base]drawbox=x=0:y=0:w=1080:h=8:color=${ac}@0.95:t=fill[v1]`,
-      // 下部バー (8px)
-      `[v1]drawbox=x=0:y=1912:w=1080:h=8:color=${ac}@0.90:t=fill[v2]`,
-      // カテゴリブランドバー（中央横ライン）
-      `[v2]drawbox=x=0:y=960:w=1080:h=2:color=${ac}@0.5:t=fill[v3]`,
-      // プログレスバー（下部）
-      `[v3]drawbox=x=0:y=1920:w='min(1080\\,1080*t/${duration})':h=6:color=${ac}@0.7:t=fill[vid]`,
-    ].join(';');
+    const N = 8; // パルスバーの本数
+    const barHeight = 40;
+    const barGap = 12;
+    const barBaseY = 800; // パルスゾーン上端Y
+    const barMaxW = 960;
+    const barStartX = 60;
+
+    const filters: string[] = ['[0:v]copy[v0]'];
+    let prevLabel = 'v0';
+    let labelIdx = 1;
+
+    const addBox = (x: string, y: string, w: string, h: string, color: string, alpha: number) => {
+      const cur = `v${labelIdx++}`;
+      filters.push(`[${prevLabel}]drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${color}@${alpha.toFixed(2)}:t=fill[${cur}]`);
+      prevLabel = cur;
+    };
+
+    // 上部ブランドバー（16px）
+    addBox('0', '0', '1080', '16', accentHex, 0.95);
+
+    // 下部ブランドバー（8px）
+    addBox('0', '1912', '1080', '8', accentHex, 0.90);
+
+    // bg2色の横ストライプ（縦に等間隔・背景に奥行き感）
+    for (let i = 0; i < 6; i++) {
+      const y = 80 + i * 280;
+      const shade = `rgb(${Math.min(255, bR + 15)}\\,${Math.min(255, bG + 15)}\\,${Math.min(255, bB + 15)})`;
+      addBox('0', String(y), '1080', '120', shade, 0.18);
+    }
+
+    // 左アクセントライン（4px縦ライン）
+    addBox('0', '0', '4', '1920', accentHex, 0.80);
+
+    // 右アクセントライン（4px縦ライン）
+    addBox('1076', '0', '4', '1920', accentHex, 0.40);
+
+    // ── パルスバーゾーン ──
+    // N本のバーが時間経過で幅が変わるアニメーション（疑似音声ビジュアライザー）
+    const pulseWidths = [0.85, 0.60, 0.90, 0.45, 0.75, 0.55, 0.80, 0.50];
+    for (let i = 0; i < N; i++) {
+      const y = barBaseY + i * (barHeight + barGap);
+      const w = Math.floor(barMaxW * pulseWidths[i % pulseWidths.length]);
+      // 奇数本は左から、偶数本は右から（交互で動的感）
+      const x = i % 2 === 0 ? barStartX : barStartX + (barMaxW - w);
+      const alpha = 0.5 + 0.3 * pulseWidths[i % pulseWidths.length];
+      addBox(String(x), String(y), String(w), String(barHeight), accentHex, alpha);
+    }
+
+    // 中央の大きなブランドボックス（題名エリア・半透明）
+    const midColor = `rgb(${Math.min(255, aR - 30)}\\,${Math.min(255, aG - 30)}\\,${Math.min(255, aB - 30)})`;
+    addBox('40', '200', '1000', '180', midColor, 0.25);
+
+    // 中央アクセントライン（3本）
+    addBox('40', '200', '6', '180', accentHex, 0.90);
+    addBox('40', '375', '1000', '3', accentHex, 0.60);
+
+    // 下部CTAボックス（半透明）
+    const ctaColor = `rgb(${Math.min(255, aR + 20)}\\,${Math.min(255, aG + 20)}\\,${Math.min(255, aB + 20)})`;
+    addBox('40', '1650', '1000', '220', ctaColor, 0.15);
+    addBox('40', '1650', '6', '220', accentHex, 0.85);
+
+    // プログレスバー（動的に伸びる）
+    const cur = `v${labelIdx++}`;
+    filters.push(`[${prevLabel}]drawbox=x=0:y=1912:w='min(1080\\,1080*t/${duration})':h=8:color=${accentHex}@0.70:t=fill[${cur}]`);
+    prevLabel = cur;
+
+    // 最終ラベルを [vid] にリネーム
+    const finalFilter = filters.map((f, i) => {
+      if (i === filters.length - 1) return f.replace(`[${prevLabel}]`, `[${prevLabel}]`);
+      return f;
+    }).join(';') + `;[${prevLabel}]copy[vid]`;
 
     await execFileAsync(ffmpeg, [
       '-y',
       '-f', 'lavfi',
-      '-i', `color=c=${bg}:size=1080x1920:rate=30:duration=${duration + 2}`,
+      '-i', `color=c=${bgColor}:size=1080x1920:rate=30:duration=${duration + 2}`,
       '-i', ttsPath,
-      '-filter_complex', filterComplex,
+      '-filter_complex', finalFilter,
       '-map', '[vid]',
       '-map', '1:a',
       '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',

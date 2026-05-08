@@ -18,6 +18,7 @@ import { fetchLatestArticles, generateCanvasItemFromArticle, FALLBACK_CANVAS } f
 import { generateXPost, notifyDiscord } from '@/lib/gemini';
 import { postArticleToBuffer } from '@/lib/youtube';
 import { phaseCanvas } from '@/lib/pipeline';
+import { isAlreadyProcessed, markAsProcessed } from '@/lib/processed-urls';
 import type { CtaConfig } from '@/lib/types';
 
 // ── カテゴリ別 CTA 設定 ──────────────────────────────────────────────────
@@ -149,7 +150,22 @@ export async function GET(req: Request) {
       results.push({ step: 'RSS取得', status: '✅', detail: `${articles[0].title}` });
     }
 
-    const article = articles[0] ?? null;
+    // 未処理の記事のみ対象（新記事フィルタリング）
+    let article = null;
+    let skippedCount = 0;
+    for (const a of articles) {
+      const done = await isAlreadyProcessed(a.url);
+      if (!done) { article = a; break; }
+      skippedCount++;
+    }
+
+    if (skippedCount > 0 && !article) {
+      // 全記事が処理済み → フォールバックに切り替え
+      results.push({ step: 'RSS取得', status: '⚠️', detail: `全${skippedCount}件処理済み → フォールバック使用` });
+      await notifyDiscord(`[article-pipeline] ${category}: 全記事処理済み → フォールバック`);
+    } else if (article) {
+      results.push({ step: 'RSS取得', status: '✅', detail: `新記事: ${article.title}` });
+    }
 
     // ────────────────────────────────────────────────────────────────
     // STEP 2: X投稿文生成 → Buffer投稿
@@ -200,6 +216,11 @@ export async function GET(req: Request) {
         status: canvasResult.ok ? '✅' : '❌',
         detail: canvasResult.youtubeUrl ?? canvasResult.message,
       });
+
+      // 投稿成功した記事URLを処理済みとして記録（重複防止）
+      if (canvasResult.ok && canvasResult.youtubeUrl && article) {
+        await markAsProcessed(article.url, category, canvasResult.youtubeUrl);
+      }
 
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
