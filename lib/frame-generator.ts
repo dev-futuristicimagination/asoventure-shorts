@@ -12,10 +12,8 @@
 
 import satori from 'satori';
 import { join } from 'path';
-import { readFile, existsSync } from 'fs';
-import { promisify } from 'util';
-
-const readFileAsync = promisify(readFile);
+import { existsSync } from 'fs';
+import { readFile as readFileAsync } from 'fs/promises';
 
 // テーマカラー（canvas.tsと同じ）
 const THEME: Record<string, { bg: string; accent: string; accent2: string; label: string }> = {
@@ -34,8 +32,28 @@ let fontCache: ArrayBuffer | null = null;
 
 async function loadFont(): Promise<ArrayBuffer> {
   if (fontCache) return fontCache;
-  const fontPath = join(process.cwd(), 'public', 'fonts', 'NotoSansJP-Regular.ttf');
-  const buf = await readFileAsync(fontPath);
+
+  // NotoSansJP-satori.ttf: Google Fonts の static版（satori互換）
+  // NotoSansJP-Regular.ttf はfvarテーブル問題でsatori非互換
+  const fontPath = join(process.cwd(), 'public', 'fonts', 'NotoSansJP-satori.ttf');
+  let buf: Buffer | null = null;
+
+  if (existsSync(fontPath)) {
+    buf = await readFileAsync(fontPath);
+    console.log('[FrameGen] ローカルフォント使用:', fontPath.split('/').pop());
+  } else {
+    // フォールバック: Google Fonts から直接取得（Vercel初回デプロイ時など）
+    console.log('[FrameGen] フォントをGoogle Fontsから取得中...');
+    const res = await fetch(
+      'https://fonts.gstatic.com/s/notosansjp/v53/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.ttf',
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+    const ab = await res.arrayBuffer();
+    buf = Buffer.from(ab);
+    console.log('[FrameGen] Google Fontsフォント取得完了:', buf.length, 'bytes');
+  }
+
   fontCache = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   return fontCache;
 }
