@@ -317,8 +317,14 @@ export async function phaseCanvas(
     return { ok: true, message: msg, youtubeUrl };
 
   } catch (e) {
-    const msg = `[${category}] Canvas失敗: ${e instanceof Error ? e.message : String(e)}`;
-    await notifyDiscord(msg);
+    // FFmpegエラーの場合はstderrも含める
+    let detail = e instanceof Error ? e.message : String(e);
+    if (e && typeof e === 'object' && 'stderr' in e) {
+      const stderr = (e as { stderr: string }).stderr;
+      if (stderr) detail += '\n[stderr] ' + stderr.slice(-500);
+    }
+    const msg = `[${category}] Canvas失敗: ${detail}`;
+    await notifyDiscord(msg.slice(0, 1000));
     return { ok: false, message: msg };
   }
 }
