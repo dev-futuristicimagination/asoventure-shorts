@@ -1,4 +1,8 @@
-// app/api/health/route.ts — パンダ子（パンダ♀）健康tips Shorts
+// app/api/health/route.ts — 健康・メンタルtips Shorts
+// 【2026-05-08 プロデューサー判断による全面改良】
+// ✅ キャラ名（パンダ子）をタイトルから除外 → 情報系タイトルに統一
+// ✅ 就活生×社会人の最大公約数をターゲット（Cheese LINE CTA追加）
+// ✅ 「〇〇する方法N選」「なぜ〇〇なのか」「〇〇の人が知らないこと」
 import { NextResponse } from 'next/server';
 import { phaseA, phaseB } from '@/lib/pipeline';
 import type { ShortItem, CtaConfig } from '@/lib/types';
@@ -8,46 +12,79 @@ const PANDAKO = `2.5D anime style VTuber character "Pandako": young female Giant
 const CTA: CtaConfig = {
   block: [
     '━━━━━━━━━━━━━━━━━━━━',
-    '💚 毎日30秒の健康tips配信中！',
-    '👉 チャンネル登録で見逃しゼロ',
-    'https://www.youtube.com/@asoventure_project?utm_source=shorts&utm_medium=desc&utm_campaign=pandako_health',
+    '💚 就活・仕事のストレスをAIに相談してみよう',
+    '🧀 Cheese 無料LINE登録',
+    'https://lin.ee/8VAVNEk?utm_source=youtube&utm_medium=shorts&utm_campaign=health_info',
     '',
-    '#健康 #健康習慣 #睡眠 #ストレス解消 #メンタルヘルス #ダイエット #Shorts',
+    '#健康 #メンタルヘルス #ストレス解消 #就活 #睡眠 #生産性 #Shorts',
   ],
-  tags: ['健康', '健康習慣', '睡眠改善', 'ストレス解消', 'メンタルヘルス', 'ダイエット', 'Shorts', '30秒tips'],
+  tags: ['健康', 'メンタルヘルス', 'ストレス解消', '就活', '睡眠改善', '集中力', 'Shorts', '生産性'],
   ytCategoryId: '26',
 };
 
 const POOLS: ShortItem[] = [
+  // === A: 逆説型 ===
   {
-    topic: '睡眠の質を上げる方法',
-    title: '睡眠の質が劇的に上がる！パンダ子の3つのtips💤',
-    narration: '睡眠不足で集中できてない？寝る1時間前にスマホを置いて、部屋を少し暗くして、温かい飲み物を飲む。これだけで睡眠の質がグンと上がります！チャンネル登録で毎日tips！',
-    videoPrompt: `Opening thumbnail frame: ${PANDAKO} holding pillow with sleepy cozy expression, bold white text "睡眠の質UP！3つのtips" at top. Scene: Pandako demonstrates 3 sleep tips in sequence - putting down phone, dimming lights, drinking warm tea. Each tip shown with satisfying result animation. Peaceful bedroom setting.`,
+    topic: '睡眠時間より睡眠の質が集中力を決める理由',
+    title: '睡眠時間より睡眠の質が集中力を決める科学的な理由',
+    narration: '8時間寝ても疲れが取れない人はいませんか？実は睡眠の「質」が「量」より重要です。深い睡眠を取るには、寝る90分前の入浴、部屋温度18〜20℃、スマホを充電器から離すことが効果的。',
+    videoPrompt: `Opening scene: ${PANDAKO} showing 8h clock vs quality sleep diagram. Scene: Sleep quality visualization with deep sleep waves. Three tips appearing with satisfying implementation animations. Scientific aesthetic with calm blue tones.`,
   },
   {
-    topic: 'ストレス解消法',
-    title: '就活のストレス、今すぐ解消！パンダ子流メソッド🌿',
-    narration: '就活のプレッシャー、しんどいよね。まず深呼吸を3回。次に好きな音楽を1曲聴く。最後に5分間散歩する。この3ステップを試してみて！チャンネル登録で毎日tips！',
-    videoPrompt: `Opening thumbnail frame: ${PANDAKO} with stress lines then relaxed smile, bold white text "ストレス即解消！" at top. Scene: Pandako demonstrates deep breathing, music listening with headphones, short walk. Each step shows tension melting away with color changing from grey to bright green. Nature sounds BGM.`,
+    topic: '運動より食事がメンタルを安定させる理由',
+    title: '運動より食事がメンタルを安定させる理由【科学的根拠あり】',
+    narration: 'メンタルが不安定な人に足りていない栄養素がほぼ決まっています。トリプトファン（セロトニンの原料）・マグネシウム・ビタミンD。納豆・バナナ・鮭を週3回食べるだけで変わります。',
+    videoPrompt: `Opening scene: ${PANDAKO} holding food items glowing with mental health benefits. Scene: Nutritional pathway showing food→brain chemistry visualization. Mental stability meter rising with each healthy food. Colorful and energetic animation.`,
+  },
+  // === B: 数字+問題型 ===
+  {
+    topic: '就活ストレスを3分で解消する方法',
+    title: '就活のストレスを3分で解消する方法3選【科学的に効果あり】',
+    narration: '就活のプレッシャーを即効で解消する方法が3つあります。①4-7-8呼吸法（4秒吸う・7秒止める・8秒吐く）②5分間の散歩③「今日うまくいったこと」を3つ書く。全部3分以内でできます。',
+    videoPrompt: `Opening scene: ${PANDAKO} stress meter going from red to green with timer showing 3 minutes. Scene: Three techniques demonstrated in sequence - breathing pattern animation, quick walk visualization, gratitude journaling. Scientific effectiveness indicators.`,
   },
   {
-    topic: '朝のルーティン',
-    title: '朝5分で一日が変わる！パンダ子の最強モーニング☀️',
-    narration: 'いい一日は朝で決まる。起きたらコップ一杯の水、ストレッチ1分、今日のタスクを3つ決める。たったこれだけで生産性が全然違います！チャンネル登録で毎日tips！',
-    videoPrompt: `Opening thumbnail frame: ${PANDAKO} stretching with sunrise background, bold white text "朝5分モーニングルーティン！" at top. Scene: Quick montage - Pandako drinks water with sparkle effect, does quick stretch with energy bars filling up, writes 3 tasks on glowing notepad. Sunrise colors, upbeat morning music.`,
+    topic: '集中力が続かない人が知らない5つの原因',
+    title: '集中力が続かない人が知らない本当の原因5つ',
+    narration: '集中できないのは意志力の問題ではありません。①血糖値の急上昇下落②デジタル通知③水分不足（2%の脱水で集中力30%低下）④室温（26℃以上で急低下）⑤ポモドーロ未使用。まず水を飲もう。',
+    videoPrompt: `Opening scene: ${PANDAKO} with concentration meter showing 5 leak points. Scene: Each cause revealed with dramatic "Aha!" animation. Solutions appearing next to each problem. Brain activation visualization with increasing focus levels.`,
   },
   {
-    topic: '目の疲れ対策',
-    title: '画面見すぎで目が痛い？パンダ子の即効ケア👁️',
-    narration: '就活でパソコンやスマホを見る時間が増えてる人へ。20-20-20ルールを試して！20分ごとに20フィート先を20秒見る。簡単で効果抜群です！チャンネル登録で毎日tips！',
-    videoPrompt: `Opening thumbnail frame: ${PANDAKO} with tired eyes then refreshed expression, bold white text "目の疲れ即解消！" at top. Scene: Pandako demonstrates 20-20-20 rule - shows timer, looks at distance, eyes sparkle with refreshed glow. Computer and phone visible in scene. Office + nature combined setting.`,
+    topic: '免疫力を上げる食べ物TOP3',
+    title: '免疫力が上がる食べ物TOP3と正しい食べ方',
+    narration: '免疫力を上げるなら、①ヨーグルト（腸内環境の改善）②キノコ類（βグルカンで免疫活性化）③緑茶（カテキンが抗菌）。大事なのは毎日少量を続けること。1日置きより毎日少量の方が効果的です。',
+    videoPrompt: `Opening scene: ${PANDAKO} with immunity shield getting stronger with three food items. Scene: Yogurt, mushrooms, green tea each creating protective barrier animation. Consistency vs quantity comparison. Vibrant healthy food aesthetic.`,
+  },
+  // === C: How to型 ===
+  {
+    topic: '朝5分でできる最強のコンディション作り',
+    title: '朝5分でコンディションが整う最強ルーティン【科学的根拠あり】',
+    narration: '朝5分の投資で1日のパフォーマンスが変わります。①コップ一杯の水（睡眠中の脱水を補う）②太陽光を30秒浴びる（体内時計リセット）③今日のタスクを3つだけ決める（認知負荷を下げる）。',
+    videoPrompt: `Opening scene: ${PANDAKO} in bright morning with 5-minute timer. Scene: Three morning rituals with scientific benefit labels. Energy levels rising with each action. Morning sunshine and fresh energy aesthetic.`,
   },
   {
-    topic: '免疫力アップ食品',
-    title: '免疫力を上げる食べ物TOP3！パンダ子が選ぶ🥗',
-    narration: '免疫力を上げたいなら、ヨーグルト・キノコ類・緑茶を食べて。腸活しながら体の防御力もアップ。就活本番に備えて体を作ろう！チャンネル登録で毎日tips！',
-    videoPrompt: `Opening thumbnail frame: ${PANDAKO} presenting 3 glowing food items, bold white text "免疫力UP！食材TOP3" at top. Scene: Pandako introduces yogurt, mushrooms, green tea one by one, each creating protective shield animation around her. Health bars filling up. Colorful food styling.`,
+    topic: '目の疲れを20秒で解消する20-20-20ルール',
+    title: '目の疲れが20秒で取れる20-20-20ルール【PC作業必見】',
+    narration: 'パソコン作業で目が疲れている人は「20-20-20ルール」を試してください。20分ごとに、20フィート（約6m）先を、20秒間見る。これだけで目の筋肉の緊張がほぐれます。タイマーをセットしよう。',
+    videoPrompt: `Opening scene: ${PANDAKO} with tired red eyes then refreshed bright eyes. Scene: 20-20-20 timer animation with distance visualization. Eye muscle relaxation shown as expanding rings. PC worker transformation aesthetic.`,
+  },
+  {
+    topic: '夜の睡眠準備で翌日の生産性が変わる方法',
+    title: '寝る前の30分の過ごし方で翌日の生産性が決まる理由',
+    narration: '翌日の仕事の質は、実は前夜の過ごし方で決まります。寝る30分前にやるべきこと：①明日のタスクを3つ紙に書く②スマホをベッドから遠ざける③室温を下げる。寝る直前のスマホが最もNGです。',
+    videoPrompt: `Opening scene: ${PANDAKO} preparing for sleep with evening routine checklist. Scene: Three pre-sleep rituals with brain preparation visualization. Next-day performance preview showing high productivity. Before/after sleep quality comparison.`,
+  },
+  {
+    topic: '食事制限なしでダイエットする方法',
+    title: '食事制限なしで体重が落ちる理由と正しいアプローチ',
+    narration: '食事制限ダイエットが続かない理由は「ストレスホルモンが食欲を増やす」から。正解は①食事の質を上げる（GI値が低いものを選ぶ）②食べる順番を変える（野菜→タンパク質→炭水化物）③7時間以上睡眠。',
+    videoPrompt: `Opening scene: ${PANDAKO} showing food restriction crossed out vs quality food glowing. Scene: Low GI foods presented as premium choices, eating order visualization, sleep-metabolism connection animation. Science-backed weight management aesthetic.`,
+  },
+  {
+    topic: 'メンタルを強くする習慣3つ',
+    title: 'メンタルが強い人が毎日やっている習慣3つ',
+    narration: 'メンタルが強い人は生まれつきではありません。①認知の歪みを直す（最悪を想定しすぎない）②感謝日記を書く（ネガティブバイアスをリセット）③適切な距離を置く（全員に好かれようとしない）。',
+    videoPrompt: `Opening scene: ${PANDAKO} with mental strength meter being actively maintained. Scene: Three daily habits as armor pieces clicking into place. Cognitive distortion being corrected, gratitude journal glowing, healthy boundary visualization.`,
   },
 ];
 
