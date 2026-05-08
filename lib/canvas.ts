@@ -290,10 +290,12 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     const outPath = join(tmpDir, 'canvas.mp4');
     await writeFile(ttsPath, ttsBuffer);
 
+
+    // シンプルな単色背景（gradients lavfiはVercel Linuxで非対応のためcolorフィルターを使用）
     await execFileAsync(ffmpeg, [
       '-y',
       '-f', 'lavfi',
-      '-i', `gradients=size=1080x1920:rate=30:c0=${theme.bg1}:c1=${theme.bg2}:x0=540:y0=0:x1=540:y1=1920:duration=${duration + 2}`,
+      '-i', `color=c=${theme.bg1}:size=1080x1920:rate=30:duration=${duration + 2}`,
       '-i', bgmPath,
       '-i', ttsPath,
       '-filter_complex', [
