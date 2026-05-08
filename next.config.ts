@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
   // バンドルすると /var/task/.next/server/chunks/ffmpeg に移動されて
   // 実行権限が失われ ENOENT になる (Vercel serverless 環境)
   serverExternalPackages: ['ffmpeg-static'],
+
+  // Vercel serverless: ffmpeg バイナリを outputFileTracing に明示的に含める
+  // これがないと /var/task/node_modules/ffmpeg-static/ffmpeg が ENOENT になる
+  outputFileTracingIncludes: {
+    '/api/**': ['./node_modules/ffmpeg-static/**'],
+  },
 };
 
 export default nextConfig;
