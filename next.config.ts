@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   // ffmpeg-static はバイナリファイルのため Next.js バンドルから除外する
   // バンドルすると /var/task/.next/server/chunks/ffmpeg に移動されて
   // 実行権限が失われ ENOENT になる (Vercel serverless 環境)
-  serverExternalPackages: ['ffmpeg-static'],
+  serverExternalPackages: ['ffmpeg-static', '@resvg/resvg-wasm'],
 
   // Vercel serverless: ffmpeg バイナリと公開アセットをbundleに明示的に含める
   // これがないと /var/task/node_modules/ffmpeg-static/ffmpeg が ENOENT になる
@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/**': [
       './node_modules/ffmpeg-static/**',
+      './node_modules/@resvg/resvg-wasm/**',
       './public/fonts/**',
       './public/audio/bgm/**',
       './public/images/bg/**',
