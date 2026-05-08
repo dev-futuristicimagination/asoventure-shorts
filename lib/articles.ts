@@ -94,17 +94,58 @@ async function scrapeArticlePage(url: string): Promise<{ text: string; ogImage?:
     });
     if (!res.ok) return { text: '' };
     const html = await res.text();
+    const baseUrl = new URL(url).origin;
 
     // タイトル抽出
     const title = (/<title[^>]*>([^<]+)<\/title>/i.exec(html) || [])[1]?.trim() || '';
 
-    // OGP画像抽出（og:image → twitter:image → 最初の大きいimg の順にフォールバック）
-    const ogImage =
+    // 画像URL抽出（優先順位: og:image > twitter:image > サムネイル img > 最初の img）
+    let ogImage: string | undefined;
+
+    // 1. OGPメタタグ
+    const metaMatch =
       (/<meta[^>]*property=["']og:image["'][^>]*content=["']([^>"']+)["']/i.exec(html) ||
        /<meta[^>]*content=["']([^>"']+)["'][^>]*property=["']og:image["']/i.exec(html) ||
        /<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^>"']+)["']/i.exec(html) ||
-       /<meta[^>]*content=["']([^>"']+)["'][^>]*name=["']twitter:image["']/i.exec(html))
-        ?.[1]?.trim() || undefined;
+       /<meta[^>]*content=["']([^>"']+)["'][^>]*name=["']twitter:image["']/i.exec(html));
+    if (metaMatch?.[1]) {
+      ogImage = metaMatch[1].trim();
+    }
+
+    // 2. サムネイル用img（/thumbnails/ /images/ /img/ を含むsrc）
+    if (!ogImage) {
+      const imgMatches = [...html.matchAll(/<img[^>]+src=["']([^>"']+)["'][^>]*>/gi)];
+      const thumbnailImg = imgMatches.find(m => {
+        const src = m[1];
+        return src && (
+          src.includes('/thumbnail') ||
+          src.includes('/thumb') ||
+          src.includes('/cover') ||
+          src.includes('/hero') ||
+          src.includes('/stock')
+        ) && !src.includes('icon') && !src.includes('logo');
+      });
+      if (thumbnailImg?.[1]) {
+        // 相対URLを絶対URLに変換
+        const src = thumbnailImg[1];
+        ogImage = src.startsWith('http') ? src : baseUrl + (src.startsWith('/') ? src : '/' + src);
+      }
+    }
+
+    // 3. 広告・アイコン以外の最初のimgタグ
+    if (!ogImage) {
+      const firstImg = [...html.matchAll(/<img[^>]+src=["']([^>"']+)["'][^>]*>/gi)]
+        .find(m => {
+          const src = m[1];
+          return src && !src.includes('icon') && !src.includes('logo') &&
+            !src.includes('gif') && !src.includes('avatar') &&
+            !src.includes('a8.net') && !src.includes('tracking') && !src.includes('.gif');
+        });
+      if (firstImg?.[1]) {
+        const src = firstImg[1];
+        ogImage = src.startsWith('http') ? src : baseUrl + (src.startsWith('/') ? src : '/' + src);
+      }
+    }
 
     // メインコンテンツ抽出（article, main, .content など）
     const bodyMatch = html.match(/<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i)
@@ -122,12 +163,13 @@ async function scrapeArticlePage(url: string): Promise<{ text: string; ogImage?:
     }
 
     const resultText = text ? `${title} — ${text}` : title;
-    if (ogImage) console.log(`[Articles] OGP画像取得: ${ogImage}`);
+    console.log(`[Articles] 画像: ${ogImage ? ogImage.slice(0, 80) : 'なし'}`);
     return { text: resultText, ogImage };
   } catch {
     return { text: '' };
   }
 }
+
 
 // ── サイトから記事取得（RSS優先 → sitemap+スクレイプ）──────────────────────
 export async function fetchLatestArticles(category: string, limit = 5): Promise<FetchedArticle[]> {
