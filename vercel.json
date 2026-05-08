@@ -1,5 +1,11 @@
 {
   "framework": "nextjs",
+  "functions": {
+    "app/api/**/*.ts": {
+      "includeFiles": "node_modules/ffmpeg-static/**",
+      "maxDuration": 60
+    }
+  },
   "crons": [
     { "path": "/api/cheese?phase=a",             "schedule": "0 11 * * *"   },
     { "path": "/api/cheese?phase=b",             "schedule": "20 11 * * *"  },
