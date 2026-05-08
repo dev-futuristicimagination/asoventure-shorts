@@ -297,20 +297,18 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
 
 
     // シンプルな単色背景（gradients lavfiはVercel Linuxで非対応のためcolorフィルターを使用）
+    // BGM混合はamixのVercel互換問題があるため、TTS音声のみ使用
     await execFileAsync(ffmpeg, [
       '-y',
       '-f', 'lavfi',
       '-i', `color=c=${theme.bg1}:size=1080x1920:rate=30:duration=${duration + 2}`,
-      '-i', bgmPath,
       '-i', ttsPath,
       '-filter_complex', [
         bgMovieFilter + ';',
         `[base]${filters.join(',')}[vid]`,
-        ';',
-        `[1:a][2:a]amix=inputs=2:duration=shortest:weights=0.35|1[aout]`,
       ].join(''),
       '-map', '[vid]',
-      '-map', '[aout]',
+      '-map', '1:a',
       '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '128k',
       '-t', String(duration + 0.5),
