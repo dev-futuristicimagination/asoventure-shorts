@@ -41,3 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# test artifacts (frame screenshots, test canvas files)
+*.jpg
+*.jpeg
+# *.png  # (public/images/bg •Û‚Ì‚½‚ßƒRƒƒ“ƒg)
+*.mp4
+*.wav
