@@ -10,10 +10,15 @@ const nextConfig: NextConfig = {
   // 実行権限が失われ ENOENT になる (Vercel serverless 環境)
   serverExternalPackages: ['ffmpeg-static'],
 
-  // Vercel serverless: ffmpeg バイナリを outputFileTracing に明示的に含める
+  // Vercel serverless: ffmpeg バイナリと公開アセットをbundleに明示的に含める
   // これがないと /var/task/node_modules/ffmpeg-static/ffmpeg が ENOENT になる
+  // また /var/task/public/fonts/ や /var/task/public/audio/bgm/ も含める
   outputFileTracingIncludes: {
-    '/api/**': ['./node_modules/ffmpeg-static/**'],
+    '/api/**': [
+      './node_modules/ffmpeg-static/**',
+      './public/fonts/**',
+      './public/audio/bgm/**',
+    ],
   },
 };
 
