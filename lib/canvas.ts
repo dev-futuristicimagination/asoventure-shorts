@@ -94,15 +94,18 @@ function wrapText(text: string, maxHalfWidth: number): string[] {
 }
 
 // テキスト描画（シャドウ付き・左寄せ対応）
+// alpha オプションは古いffmpegで非対応のため削除
 function dt(
   font: string, text: string, fs: number, color: string,
-  x: string, y: number, en: string, al: string
+  x: string, y: number, en: string, _al: string
 ): string[] {
   const e = esc(text);
   if (!e) return [];
+  // fontcolor の 0x プレフィックスを # に変換（ffmpeg互換）
+  const fc = color.replace(/^0x/, '#');
   return [
-    `drawtext=fontfile='${font}':text='${e}':fontcolor=black:fontsize=${fs}:x='(${x})+2':y=${y + 2}:enable='${en}':alpha='${al}'`,
-    `drawtext=fontfile='${font}':text='${e}':fontcolor=${color}:fontsize=${fs}:x='${x}':y=${y}:enable='${en}':alpha='${al}'`,
+    `drawtext=fontfile='${font}':text='${e}':fontcolor=black:fontsize=${fs}:x='(${x})+2':y=${y + 2}:enable='${en}'`,
+    `drawtext=fontfile='${font}':text='${e}':fontcolor=${fc}:fontsize=${fs}:x='${x}':y=${y}:enable='${en}'`,
   ];
 }
 
