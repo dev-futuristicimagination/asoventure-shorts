@@ -1,4 +1,4 @@
-﻿// lib/canvas.ts — テキスト動画生成 v5「シンプル左寄せスライド方式」
+// lib/canvas.ts — テキスト動画生成 v5「シンプル左寄せスライド方式」
 // 【設計変更 v5】参照動画スタイルに合わせてシンプル化
 // - 背景: 単色グラデーション静止（軌道パン・色呼吸を廃止）
 // - テキスト: 左寄せ（x=80固定）
@@ -101,7 +101,7 @@ function dt(
   const e = esc(text);
   if (!e) return [];
   return [
-    `drawtext=fontfile='${font}':text='${e}':fontcolor=black@0.55:fontsize=${fs}:x='(${x})+2':y=${y + 2}:enable='${en}':alpha='${al}'`,
+    `drawtext=fontfile='${font}':text='${e}':fontcolor=black:fontsize=${fs}:x='(${x})+2':y=${y + 2}:enable='${en}':alpha='${al}'`,
     `drawtext=fontfile='${font}':text='${e}':fontcolor=${color}:fontsize=${fs}:x='${x}':y=${y}:enable='${en}':alpha='${al}'`,
   ];
 }
@@ -266,7 +266,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       }
 
       // ヒント（左寄せ・下部）
-      filters.push(...dt(font, 'いいね＆チャンネル登録お願いします', 24, 'white@0.7', LEFT, 1770, en, fi(0.4)));
+      filters.push(...dt(font, 'いいね＆チャンネル登録お願いします', 24, 'white', LEFT, 1770, en, fi(0.4)));
     });
 
     // ─── CTAスライド ─────────────────────────────────────────────
@@ -284,7 +284,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       filters.push(...dt(font, ctaMain, 44, 'white', LEFT, 600, en, fi(0.05)));
       filters.push(...dt(font, opts.siteUrl.slice(0, 30), 34, theme.accent, LEFT, 680, en, fi(0.12)));
       filters.push(...dt(font, 'いいね＆チャンネル登録お願いします', 30, 'white', LEFT, 760, en, fi(0.2)));
-      filters.push(...dt(font, 'コメントで感想を教えてください', 26, theme.accent + '@0.85', LEFT, 820, en, fi(0.28)));
+      filters.push(...dt(font, 'コメントで感想を教えてください', 26, theme.accent, LEFT, 820, en, fi(0.28)));
     }
 
     // ── FFmpeg実行 ────────────────────────────────────────────────
@@ -304,7 +304,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         bgMovieFilter + ';',
         `[base]${filters.join(',')}[vid]`,
         ';',
-        `[1:a][2:a]amix=inputs=2:duration=shortest:weights=0.35 1[aout]`,
+        `[1:a][2:a]amix=inputs=2:duration=shortest:weights=0.35|1[aout]`,
       ].join(''),
       '-map', '[vid]',
       '-map', '[aout]',
