@@ -18,6 +18,7 @@ export interface CanvasItem {
   fullUrl: string;        // 説明欄・X投稿用フルURL
   ctaText: string;        // CTA文言 (例: "詳しくは↓")
   lang?: 'ja' | 'en';
+  bgImageUrl?: string;    // 記事OGP画像URL（背景に使用）
 }
 
 export interface PendingData {

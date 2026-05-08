@@ -1,14 +1,17 @@
-// lib/canvas.ts — Canvas動画生成 v7「カラーパルス可視化版」
+// lib/canvas.ts — Canvas動画生成 v8「OGP画像背景版」
 // 【2026-05-08 プロデューサー判断】
-// drawtext (libfreetype未バンドル) が使えないVercel Linux環境のため
-// drawbox のみで高品質な見た目を実現する
+// 記事のog:image を背景に使用することで視覚的なクオリティを大幅向上
 //
-// ビジュアル設計:
-//   - カテゴリグラデーション風ストライプ（明るめ）
-//   - 音声に合わせて見えるパルスバー（固定タイミングで疑似表現）
-//   - ブランドカラーのアクセントライン複数本
-//   - プログレスバー（下部）
-//   - 全体的に「見える動画」に
+// 生成フロー:
+//   1. bgImageUrl が指定されている場合:
+//      - 画像をダウンロード → FFmpeg で 1080x1920 に Center Crop
+//      - 半透明の暗いオーバーレイ（readability確保）
+//      - ブランドアクセントバーを重ねる
+//   2. bgImageUrl がない場合:
+//      - カテゴリカラーのパルスバービジュアル（v7の動作）
+//
+// drawtext は Vercel Linux ffmpeg-static に含まれないため使用不可
+// テキスト情報は音声TTS + YouTube概要欄で補う
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -43,9 +46,21 @@ export interface CanvasOptions {
   fullUrl: string;
   ctaText: string;
   lang?: 'ja' | 'en';
+  bgImageUrl?: string; // 記事OGP画像URL（背景に使用）
 }
 
-// hex色を r/g/b 成分に分解（drawbox用）
+// hex → #RRGGBB
+function ensureHex(color: string): string {
+  return color.startsWith('#') ? color : '#' + color.replace(/^0x/, '');
+}
+
+// r,g,b → #RRGGBB (ffmpegはrgb()記法非対応)
+function rgbToHex(r: number, g: number, b: number): string {
+  const c = (v: number) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+// hex → { r, g, b }
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const clean = hex.replace(/^#|^0x/, '');
   return {
@@ -55,130 +70,198 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-// r,g,b を #RRGGBB 形式に変換（ffmpegは rgb() 記法非対応）
-function rgbToHex(r: number, g: number, b: number): string {
-  const clamp = (v: number) => Math.max(0, Math.min(255, v));
-  return '#' + [clamp(r), clamp(g), clamp(b)].map(v => v.toString(16).padStart(2, '0')).join('');
-}
-
-// ── Canvas動画生成 v7 ─────────────────────────────────────────────────────
-// 完全 drawbox ベース（drawtext不使用）のブランドビジュアル動画
+// ── Canvas動画生成 v8 ─────────────────────────────────────────────────────
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
   const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const theme = CANVAS_THEME[opts.category] || CANVAS_THEME.health;
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
 
-  // 背景色（# プレフィックス形式）
-  const bgColor = theme.bg1.startsWith('#') ? theme.bg1 : '#' + theme.bg1.replace('0x', '');
-  const accentHex = theme.accent.startsWith('#') ? theme.accent : '#' + theme.accent.replace('0x', '');
+  const bgColor = ensureHex(theme.bg1);
+  const accentHex = ensureHex(theme.accent);
   const { r: aR, g: aG, b: aB } = hexToRgb(accentHex);
 
-  // 少し明るい背景 (bg2 を bg1 と混合した擬似グラデーション)
-  const bg2Hex = theme.bg2.startsWith('#') ? theme.bg2 : '#' + theme.bg2.replace('0x', '');
-  const { r: bR, g: bG, b: bB } = hexToRgb(bg2Hex);
-
   try {
+    // TTS音声生成
     const ttsBuffer = await generateTTS(opts.narration);
     const duration = Math.min(Math.max(getTTSDuration(ttsBuffer), 10), 15);
 
     const ttsPath = join(tmpDir, 'tts.wav');
+    const bgImgPath = join(tmpDir, 'bg.jpg');
     const outPath = join(tmpDir, 'canvas.mp4');
     await writeFile(ttsPath, ttsBuffer);
 
-    // ── フィルター構築（drawbox のみ）──────────────────────────────────
-    // 縦型 1080x1920 のビジュアル設計:
-    //   上部ブランドバー（16px）
-    //   中央部: 横ストライプ（bg2色ブロック）
-    //   パルスバー: 時間経過で幅が変化するバー群（音声の存在感を演出）
-    //   下部プログレスバー（8px）
-    //   左右アクセントライン（4px）
+    // OGP画像の取得を試みる
+    let hasImage = false;
+    if (opts.bgImageUrl) {
+      try {
+        const imgRes = await fetch(opts.bgImageUrl, {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'AsoventureBot/1.0' },
+        });
+        if (imgRes.ok) {
+          const imgBuf = await imgRes.arrayBuffer();
+          await writeFile(bgImgPath, Buffer.from(imgBuf));
+          hasImage = true;
+          console.log(`[Canvas] OGP画像を取得: ${opts.bgImageUrl}`);
+        }
+      } catch (e) {
+        console.warn(`[Canvas] OGP画像取得失敗: ${e}`);
+      }
+    }
 
-    const N = 8; // パルスバーの本数
-    const barHeight = 40;
-    const barGap = 12;
-    const barBaseY = 800; // パルスゾーン上端Y
-    const barMaxW = 960;
-    const barStartX = 60;
+    // ── ブランドオーバーレイフィルター（drawboxのみ）──────────────────────
+    // 上下アクセントバー + プログレスバー
+    const buildOverlayFilter = (inputLabel: string): { filters: string; outputLabel: string } => {
+      const parts: string[] = [];
+      let prev = inputLabel;
+      let idx = 0;
+      const next = () => { const l = `ov${idx++}`; return l; };
 
-    const filters: string[] = ['[0:v]copy[v0]'];
-    let prevLabel = 'v0';
-    let labelIdx = 1;
+      // 上部ブランドバー (12px)
+      let cur = next();
+      parts.push(`[${prev}]drawbox=x=0:y=0:w=1080:h=12:color=${accentHex}@0.95:t=fill[${cur}]`); prev = cur;
 
-    const addBox = (x: string, y: string, w: string, h: string, color: string, alpha: number) => {
-      const cur = `v${labelIdx++}`;
-      filters.push(`[${prevLabel}]drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${color}@${alpha.toFixed(2)}:t=fill[${cur}]`);
-      prevLabel = cur;
+      // 下部ブランドバー (12px)
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=0:y=1908:w=1080:h=12:color=${accentHex}@0.90:t=fill[${cur}]`); prev = cur;
+
+      // 左アクセントライン (4px)
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=0:y=0:w=4:h=1920:color=${accentHex}@0.75:t=fill[${cur}]`); prev = cur;
+
+      // 右アクセントライン (4px)
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=1076:y=0:w=4:h=1920:color=${accentHex}@0.40:t=fill[${cur}]`); prev = cur;
+
+      // 上部タイトルゾーン（半透明ダーク）
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=20:y=80:w=1040:h=200:color=#000000@0.55:t=fill[${cur}]`); prev = cur;
+      // タイトルゾーン左アクセント
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=20:y=80:w=6:h=200:color=${accentHex}@0.95:t=fill[${cur}]`); prev = cur;
+
+      // 中央パルスバー（6本・交互）
+      const pulseWidths = [0.80, 0.55, 0.85, 0.45, 0.70, 0.60];
+      const barH = 38;
+      const barGap = 14;
+      const barStart = 750;
+      for (let i = 0; i < 6; i++) {
+        const y = barStart + i * (barH + barGap);
+        const w = Math.floor(960 * pulseWidths[i]);
+        const x = i % 2 === 0 ? 60 : 60 + (960 - w);
+        cur = next();
+        parts.push(`[${prev}]drawbox=x=${x}:y=${y}:w=${w}:h=${barH}:color=${accentHex}@${(0.45 + 0.3 * pulseWidths[i]).toFixed(2)}:t=fill[${cur}]`);
+        prev = cur;
+      }
+
+      // 下部CTAゾーン（半透明ダーク）
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=20:y=1620:w=1040:h=260:color=#000000@0.60:t=fill[${cur}]`); prev = cur;
+      // CTAゾーン左アクセント
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=20:y=1620:w=6:h=260:color=${accentHex}@0.90:t=fill[${cur}]`); prev = cur;
+
+      // プログレスバー（動的）
+      cur = next();
+      parts.push(`[${prev}]drawbox=x=0:y=1912:w='min(1080\\,1080*t/${duration})':h=8:color=${accentHex}@0.80:t=fill[${cur}]`);
+      prev = cur;
+
+      return { filters: parts.join(';'), outputLabel: prev };
     };
 
-    // 上部ブランドバー（16px）
-    addBox('0', '0', '1080', '16', accentHex, 0.95);
+    if (hasImage) {
+      // ── モード1: OGP画像を背景に使用 ──────────────────────────────────
+      // 1. 画像を1080x1920にcrop
+      // 2. duration秒の静止動画を生成
+      // 3. ブランドオーバーレイを重ねる
 
-    // 下部ブランドバー（8px）
-    addBox('0', '1912', '1080', '8', accentHex, 0.90);
+      const { filters: overlayFilters, outputLabel } = buildOverlayFilter('scaled');
 
-    // bg2色の横ストライプ（縦に等間隔・背景に奥行き感）
-    for (let i = 0; i < 6; i++) {
-      const y = 80 + i * 280;
-      const shade = rgbToHex(bR + 15, bG + 15, bB + 15);
-      addBox('0', String(y), '1080', '120', shade, 0.18);
+      const filterComplex = [
+        // 画像を縦型にcrop（アスペクト比を保って1080幅→1920高さにcrop）
+        `[0:v]scale=1080:-1,pad=1080:1920:0:(oh-ih)/2:color=${bgColor},setsar=1[scaled]`,
+        // ブランドオーバーレイ
+        overlayFilters,
+        // 最終出力
+        `[${outputLabel}]copy[vid]`,
+      ].join(';');
+
+      await execFileAsync(ffmpeg, [
+        '-y',
+        '-loop', '1', '-i', bgImgPath,                             // OGP画像（静止）
+        '-i', ttsPath,                                             // TTS音声
+        '-filter_complex', filterComplex,
+        '-map', '[vid]',
+        '-map', '1:a',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-t', String(duration + 0.5),
+        '-movflags', '+faststart',
+        outPath,
+      ], { maxBuffer: 512 * 1024 * 1024 });
+
+    } else {
+      // ── モード2: カテゴリカラー背景（OGP画像なし時のフォールバック）───────
+      const { r: bR, g: bG, b: bB } = hexToRgb(ensureHex(theme.bg2));
+
+      const filters: string[] = ['[0:v]copy[base]'];
+      let prevLabel = 'base';
+      let labelIdx = 0;
+
+      const addBox = (x: string, y: string, w: string, h: string, color: string, alpha: number) => {
+        const cur = `v${labelIdx++}`;
+        filters.push(`[${prevLabel}]drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${color}@${alpha.toFixed(2)}:t=fill[${cur}]`);
+        prevLabel = cur;
+      };
+
+      // 背景ストライプ
+      for (let i = 0; i < 6; i++) {
+        addBox('0', String(80 + i * 280), '1080', '120', rgbToHex(bR + 15, bG + 15, bB + 15), 0.18);
+      }
+      // ブランドライン
+      addBox('0', '0', '1080', '12', accentHex, 0.95);
+      addBox('0', '1908', '1080', '12', accentHex, 0.90);
+      addBox('0', '0', '4', '1920', accentHex, 0.80);
+      addBox('1076', '0', '4', '1920', accentHex, 0.40);
+
+      // タイトルゾーン
+      addBox('20', '80', '1040', '200', rgbToHex(aR - 30, aG - 30, aB - 30), 0.30);
+      addBox('20', '80', '6', '200', accentHex, 0.95);
+
+      // パルスバー（6本）
+      const pulseWidths = [0.80, 0.55, 0.85, 0.45, 0.70, 0.60];
+      for (let i = 0; i < 6; i++) {
+        const y = 750 + i * (38 + 14);
+        const w = Math.floor(960 * pulseWidths[i]);
+        const x = i % 2 === 0 ? 60 : 60 + (960 - w);
+        addBox(String(x), String(y), String(w), '38', accentHex, 0.45 + 0.3 * pulseWidths[i]);
+      }
+
+      // CTAゾーン
+      addBox('20', '1620', '1040', '260', rgbToHex(aR + 20, aG + 20, aB + 20), 0.20);
+      addBox('20', '1620', '6', '260', accentHex, 0.90);
+
+      // プログレスバー
+      const cur = `v${labelIdx++}`;
+      filters.push(`[${prevLabel}]drawbox=x=0:y=1912:w='min(1080\\,1080*t/${duration})':h=8:color=${accentHex}@0.80:t=fill[${cur}]`);
+      prevLabel = cur;
+
+      const filterComplex = filters.join(';') + `;[${prevLabel}]copy[vid]`;
+
+      await execFileAsync(ffmpeg, [
+        '-y',
+        '-f', 'lavfi', '-i', `color=c=${bgColor}:size=1080x1920:rate=30:duration=${duration + 2}`,
+        '-i', ttsPath,
+        '-filter_complex', filterComplex,
+        '-map', '[vid]',
+        '-map', '1:a',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-t', String(duration + 0.5),
+        '-movflags', '+faststart',
+        outPath,
+      ], { maxBuffer: 512 * 1024 * 1024 });
     }
-
-    // 左アクセントライン（4px縦ライン）
-    addBox('0', '0', '4', '1920', accentHex, 0.80);
-
-    // 右アクセントライン（4px縦ライン）
-    addBox('1076', '0', '4', '1920', accentHex, 0.40);
-
-    // ── パルスバーゾーン ──
-    // N本のバーが時間経過で幅が変わるアニメーション（疑似音声ビジュアライザー）
-    const pulseWidths = [0.85, 0.60, 0.90, 0.45, 0.75, 0.55, 0.80, 0.50];
-    for (let i = 0; i < N; i++) {
-      const y = barBaseY + i * (barHeight + barGap);
-      const w = Math.floor(barMaxW * pulseWidths[i % pulseWidths.length]);
-      // 奇数本は左から、偶数本は右から（交互で動的感）
-      const x = i % 2 === 0 ? barStartX : barStartX + (barMaxW - w);
-      const alpha = 0.5 + 0.3 * pulseWidths[i % pulseWidths.length];
-      addBox(String(x), String(y), String(w), String(barHeight), accentHex, alpha);
-    }
-
-    // 中央の大きなブランドボックス（題名エリア・半透明）
-    const midColor = rgbToHex(aR - 30, aG - 30, aB - 30);
-    addBox('40', '200', '1000', '180', midColor, 0.25);
-
-    // 中央アクセントライン（3本）
-    addBox('40', '200', '6', '180', accentHex, 0.90);
-    addBox('40', '375', '1000', '3', accentHex, 0.60);
-
-    // 下部CTAボックス（半透明）
-    const ctaColor = rgbToHex(aR + 20, aG + 20, aB + 20);
-    addBox('40', '1650', '1000', '220', ctaColor, 0.15);
-    addBox('40', '1650', '6', '220', accentHex, 0.85);
-
-    // プログレスバー（動的に伸びる）
-    const cur = `v${labelIdx++}`;
-    filters.push(`[${prevLabel}]drawbox=x=0:y=1912:w='min(1080\\,1080*t/${duration})':h=8:color=${accentHex}@0.70:t=fill[${cur}]`);
-    prevLabel = cur;
-
-    // 最終ラベルを [vid] にリネーム
-    const finalFilter = filters.map((f, i) => {
-      if (i === filters.length - 1) return f.replace(`[${prevLabel}]`, `[${prevLabel}]`);
-      return f;
-    }).join(';') + `;[${prevLabel}]copy[vid]`;
-
-    await execFileAsync(ffmpeg, [
-      '-y',
-      '-f', 'lavfi',
-      '-i', `color=c=${bgColor}:size=1080x1920:rate=30:duration=${duration + 2}`,
-      '-i', ttsPath,
-      '-filter_complex', finalFilter,
-      '-map', '[vid]',
-      '-map', '1:a',
-      '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac', '-b:a', '128k',
-      '-t', String(duration + 0.5),
-      '-movflags', '+faststart',
-      outPath,
-    ], { maxBuffer: 512 * 1024 * 1024 });
 
     return await readFile(outPath);
   } finally {

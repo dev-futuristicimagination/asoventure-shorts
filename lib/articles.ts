@@ -38,6 +38,7 @@ export interface FetchedArticle {
   url: string;
   excerpt: string;
   publishedAt?: string;
+  ogImage?: string; // 記事のog:image画像 URL
 }
 
 // ── RSSパース（シンプル正規表現ベース）──────────────────────────────────
@@ -84,18 +85,26 @@ function parseSitemapUrls(xml: string, baseUrl: string, limit = 5): string[] {
   return urls.sort((a, b) => b.length - a.length).slice(0, limit);
 }
 
-// ── 記事ページの本文をスクレイプ ──────────────────────────────────────────
-async function scrapeArticlePage(url: string): Promise<string> {
+// ── 記事ページの本文と画像をスクレイプ ──────────────────────────────────
+async function scrapeArticlePage(url: string): Promise<{ text: string; ogImage?: string }> {
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(8000),
       headers: { 'User-Agent': 'AsoventureBot/1.0' },
     });
-    if (!res.ok) return '';
+    if (!res.ok) return { text: '' };
     const html = await res.text();
 
     // タイトル抽出
     const title = (/<title[^>]*>([^<]+)<\/title>/i.exec(html) || [])[1]?.trim() || '';
+
+    // OGP画像抽出（og:image → twitter:image → 最初の大きいimg の順にフォールバック）
+    const ogImage =
+      (/<meta[^>]*property=["']og:image["'][^>]*content=["']([^>"']+)["']/i.exec(html) ||
+       /<meta[^>]*content=["']([^>"']+)["'][^>]*property=["']og:image["']/i.exec(html) ||
+       /<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^>"']+)["']/i.exec(html) ||
+       /<meta[^>]*content=["']([^>"']+)["'][^>]*name=["']twitter:image["']/i.exec(html))
+        ?.[1]?.trim() || undefined;
 
     // メインコンテンツ抽出（article, main, .content など）
     const bodyMatch = html.match(/<(?:article|main)[^>]*>([\s\S]*?)<\/(?:article|main)>/i)
@@ -112,9 +121,11 @@ async function scrapeArticlePage(url: string): Promise<string> {
         .slice(0, 500);
     }
 
-    return text ? `${title} — ${text}` : title;
+    const resultText = text ? `${title} — ${text}` : title;
+    if (ogImage) console.log(`[Articles] OGP画像取得: ${ogImage}`);
+    return { text: resultText, ogImage };
   } catch {
-    return '';
+    return { text: '' };
   }
 }
 
@@ -154,23 +165,26 @@ export async function fetchLatestArticles(category: string, limit = 5): Promise<
       console.log(`[Articles] Sitemap: ${urls.length}件のURLを取得 from ${baseUrl}`);
 
       if (urls.length > 0) {
-        // 最初のURL（最も記事らしいURL）をスクレイプ
-        const topUrl = urls[0];
-        const pageText = await scrapeArticlePage(topUrl);
+        // 上位3件のURLをスクレイプ（ogImageが取れるまで試みる）
+        const results: FetchedArticle[] = [];
+        for (const topUrl of urls.slice(0, 3)) {
+          const { text: pageText, ogImage } = await scrapeArticlePage(topUrl);
 
-        if (pageText) {
-          // URLからタイトルを推測（パスの最後のセグメント）
-          const slug = topUrl.split('/').filter(Boolean).pop() || '';
-          const guessedTitle = slug.replace(/-/g, ' ').replace(/\.[a-z]+$/, '');
+          if (pageText) {
+            const slug = topUrl.split('/').filter(Boolean).pop() || '';
+            const guessedTitle = slug.replace(/-/g, ' ').replace(/\.[a-z]+$/, '');
 
-          console.log(`[Articles] Scraped: ${topUrl}`);
-          return [{
-            title: guessedTitle,
-            url: topUrl,
-            excerpt: pageText.slice(0, 300),
-            publishedAt: new Date().toISOString().split('T')[0],
-          }];
+            console.log(`[Articles] Scraped: ${topUrl} ${ogImage ? '+ OGP画像' : ''}`);
+            results.push({
+              title: guessedTitle,
+              url: topUrl,
+              excerpt: pageText.slice(0, 300),
+              publishedAt: new Date().toISOString().split('T')[0],
+              ogImage,
+            });
+          }
         }
+        if (results.length > 0) return results;
       }
     }
   } catch (e) {
@@ -236,6 +250,7 @@ export async function generateCanvasItemFromArticle(
     fullUrl: `${article.url}?utm_source=youtube&utm_medium=canvas&utm_campaign=${category}`,
     ctaText: `📖 記事を読む→`,
     lang: 'ja',
+    bgImageUrl: article.ogImage, // 記事OGP画像 → 動画背景に使用
   };
 }
 
