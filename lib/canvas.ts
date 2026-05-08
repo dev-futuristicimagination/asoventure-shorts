@@ -1,19 +1,18 @@
-// lib/canvas.ts — テキスト動画生成 v5「シンプル左寄せスライド方式」
-// 【設計変更 v5】参照動画スタイルに合わせてシンプル化
-// - 背景: 単色グラデーション静止（軌道パン・色呼吸を廃止）
-// - テキスト: 左寄せ（x=80固定）
-// - 尺: TTS長さを最大15秒にキャップ
-// - 構成: タイトル(2s) → ポイント(各3s) → ロゴ/サイト名(下部固定)
+// lib/canvas.ts — テキスト動画生成 v6「drawtext不使用版」
+// 【2026-05-08 重大発見】Vercel Linux の ffmpeg-static v7.0.2 には drawtext フィルターが含まれない
+// （libfreetype/libfontconfig未バンドル）
+// → v6: drawtext を完全廃止 → TTS音声 + カラーバーパターン動画のみ生成
+// → テキスト情報は YouTube タイトル/説明文で提供（音声ナレーション付き）
 //
-// スライド構成 (max 15s):
-//   0-2s:   タイトルスライド
-//   2-Xs:   ポイント① ② ③（均等分割）
-//   末尾2s: CTAスライド
+// 生成される動画:
+//   - 背景: カテゴリカラーの単色 (1080x1920 縦型)
+//   - アクセントバー: 上部と下部に細いカラーライン
+//   - 尺: TTS長さに依存（最大15秒）
+//   - 音声: Google TTS ナレーションのみ
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { mkdtemp, writeFile, readFile, rm } from 'fs/promises';
-import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { generateTTS, getTTSDuration } from './tts';
@@ -21,16 +20,6 @@ import { generateTTS, getTTSDuration } from './tts';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ffmpegPath: string = require('ffmpeg-static') as string;
 const execFileAsync = promisify(execFile);
-
-// ── フォントパス（Windows: C:\path → C\:/path） ────────────────────
-function getFFmpegFontPath(): string {
-  const raw = process.env.CANVAS_FONT_PATH ||
-    join(process.cwd(), 'public', 'fonts', 'NotoSansJP-Regular.ttf');
-  if (process.platform === 'win32') {
-    return raw.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:');
-  }
-  return raw.replace(/\\/g, '/'); // Linux/Vercel
-}
 
 export const CANVAS_THEME: Record<string, {
   bg1: string; bg2: string; bgSlide: string; accent: string; textColor: string; emoji: string; siteName: string;
@@ -56,257 +45,53 @@ export interface CanvasOptions {
   lang?: 'ja' | 'en';
 }
 
-// FFmpegテキストエスケープ（絵文字除去含む）
-function esc(text: string): string {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, '\u2019')
-    .replace(/:/g, '\\:')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/,/g, '\\,')
-    .replace(/=/g, '\\=')
-    .replace(/%/g, '％')
-    .replace(/[\u{1F300}-\u{1FFFF}]|[\u{2600}-\u{27FF}]/gu, '')
-    .trim();
-}
-
-// テキスト折り返し（全角/半角混在対応）
-function wrapText(text: string, maxHalfWidth: number): string[] {
-  const result: string[] = [];
-  for (const preLine of text.split('\n')) {
-    let current = '';
-    let currentW = 0;
-    for (const char of preLine) {
-      const cw = char.charCodeAt(0) > 127 ? 2 : 1;
-      if (currentW + cw > maxHalfWidth && current) {
-        result.push(current);
-        current = char;
-        currentW = cw;
-      } else {
-        current += char;
-        currentW += cw;
-      }
-    }
-    if (current) result.push(current);
-  }
-  return result;
-}
-
-// テキスト描画（シャドウ付き・左寄せ対応）
-// alpha オプションは古いffmpegで非対応のため削除
-function dt(
-  font: string, text: string, fs: number, color: string,
-  x: string, y: number, en: string, _al: string
-): string[] {
-  const e = esc(text);
-  if (!e) return [];
-  // fontcolor の 0x プレフィックスを # に変換（ffmpeg互換）
-  const fc = color.replace(/^0x/, '#');
-  return [
-    `drawtext=fontfile='${font}':text='${e}':fontcolor=black:fontsize=${fs}:x='(${x})+2':y=${y + 2}:enable='${en}'`,
-    `drawtext=fontfile='${font}':text='${e}':fontcolor=${fc}:fontsize=${fs}:x='${x}':y=${y}:enable='${en}'`,
-  ];
-}
-
-// ── Canvas動画生成 v5 ────────────────────────────────────────────────────
+// ── Canvas動画生成 v6 (drawtext不使用・Vercel互換) ──────────────────────────
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
   const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const theme = CANVAS_THEME[opts.category] || CANVAS_THEME.health;
-  const font = getFFmpegFontPath();
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
 
-  // テキストのX座標: 左寄せ固定
-  const LEFT = '80';
-  // ロゴ/サイト名は中央
-  const CENTER_X = '(w-text_w)/2';
+  // hex color: 0x → # 変換（ffmpeg lavfi互換）
+  const bg = theme.bg1.replace(/^0x/, '#');
+  const ac = theme.accent.replace(/^0x/, '#');
 
   try {
+    // TTS 音声生成
     const ttsBuffer = await generateTTS(opts.narration);
-    // v5: 最大15秒にキャップ（参照動画スタイル）
     const duration = Math.min(Math.max(getTTSDuration(ttsBuffer), 10), 15);
 
-    // ── BGM ─────────────────────────────────────────────────────────
-    const bgmPath = join(tmpDir, 'bgm.wav');
-    const localMp3 = join(process.cwd(), 'public', 'audio', 'bgm', `${opts.category}.mp3`);
-    const localDefault = join(process.cwd(), 'public', 'audio', 'bgm', 'default.mp3');
-    const useMp3 = existsSync(localMp3) ? localMp3 : existsSync(localDefault) ? localDefault : null;
-
-    if (useMp3) {
-      await execFileAsync(ffmpeg, [
-        '-y', '-stream_loop', '-1', '-i', useMp3,
-        '-filter_complex', `[0:a]volume=0.25,lowpass=f=8000[bgm]`,
-        '-map', '[bgm]', '-t', String(duration + 2), '-ac', '2', bgmPath,
-      ], { maxBuffer: 64 * 1024 * 1024 });
-    } else {
-      // 合成BGM（シンプルなコード進行）
-      const BGM_PRESETS: Record<string, { chords: number[][]; bass: number[]; tempo: number }> = {
-        finance:   { chords: [[261.63,329.63,392.00],[220.00,261.63,329.63],[174.61,220.00,261.63],[196.00,246.94,293.66]], bass:[130.81,110.00,87.31,98.00],  tempo:8 },
-        cheese:    { chords: [[196.00,246.94,293.66],[261.63,329.63,392.00],[220.00,277.18,329.63],[261.63,329.63,392.00]], bass:[98.00,130.81,110.00,130.81], tempo:6 },
-        job:       { chords: [[220.00,261.63,329.63],[246.94,293.66,369.99],[174.61,220.00,261.63],[196.00,246.94,293.66]], bass:[110.00,123.47,87.31,98.00],  tempo:8 },
-        health:    { chords: [[174.61,220.00,261.63],[220.00,261.63,329.63],[130.81,164.81,196.00],[174.61,220.00,261.63]], bass:[87.31,110.00,65.41,87.31],   tempo:10 },
-        education: { chords: [[220.00,261.63,329.63],[196.00,220.00,261.63],[174.61,220.00,261.63],[164.81,196.00,246.94]], bass:[110.00,98.00,87.31,82.41],   tempo:9 },
-        life:      { chords: [[261.63,329.63,392.00],[196.00,246.94,293.66],[220.00,261.63,329.63],[174.61,220.00,261.63]], bass:[130.81,98.00,110.00,87.31],  tempo:7 },
-      };
-      const preset = BGM_PRESETS[opts.category] || BGM_PRESETS.finance;
-      const { chords, bass, tempo } = preset;
-      const mk = (freqs: number[], amp: number) =>
-        freqs.map(f => `${amp}*sin(2*PI*${f}*t)+${amp*0.3}*sin(2*PI*${f*2}*t)`).join('+');
-      const blocks = Array.from({ length: 4 }, (_, cycle) =>
-        chords.map((ch, ci) => {
-          const ts = (cycle * chords.length + ci) * tempo;
-          const te = ts + tempo;
-          return `between(t,${ts},${te})*(${mk(ch, 0.10)}+${0.15}*sin(2*PI*${bass[ci]}*t))`;
-        }).join('+')
-      ).join('+');
-      await execFileAsync(ffmpeg, [
-        '-y', '-f', 'lavfi',
-        '-i', `aevalsrc='${blocks}:c=stereo:s=44100'`,
-        '-filter_complex', '[0:a]lowpass=f=3500,highpass=f=60,volume=1.5[bgm]',
-        '-map', '[bgm]', '-t', String(duration + 2), '-ac', '2', bgmPath,
-      ], { maxBuffer: 64 * 1024 * 1024 });
-    }
-
-    // ── v5: 背景は静止グラデーションのみ（軌道パン廃止） ──────────
-    // bg画像がある場合も低透明度で静止オーバーレイのみ
-    const bgImgPathRaw = join(process.cwd(), 'public', 'images', 'bg', `${opts.category}.png`);
-    const hasBgImg = existsSync(bgImgPathRaw);
-    const bgImgPath = hasBgImg
-      ? bgImgPathRaw.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\:')
-      : null;
-
-    // 背景画像オーバーレイ: Vercel環境ではpublic/images/bgが含まれないため常にnull
-    // movie フィルターはVercel Linuxのffmpeg-staticで動作しないことがあるため使わない
-    const bgMovieFilter = '[0:v]copy[base]';
-
-    // ── スライドタイミング計算 ──────────────────────────────────────
-    const points = opts.points.slice(0, 4); // 最大4ポイント
-    const N = points.length;
-    const TITLE_DURATION = 2.0;
-    const CTA_DURATION = 2.0;
-    const pointDuration = (duration - TITLE_DURATION - CTA_DURATION) / Math.max(N, 1);
-
-    const slides: { start: number; end: number }[] = [];
-    slides.push({ start: 0, end: TITLE_DURATION });
-    for (let i = 0; i < N; i++) {
-      slides.push({
-        start: TITLE_DURATION + i * pointDuration,
-        end: TITLE_DURATION + (i + 1) * pointDuration,
-      });
-    }
-    slides.push({ start: duration - CTA_DURATION, end: duration + 1 });
-
-    const filters: string[] = [];
-
-    // カテゴリラベル定数
-    const CAT_LABEL: Record<string, string> = {
-      health: 'HEALTH TIPS', finance: 'MONEY TIPS', education: 'STUDY TIPS',
-      life: 'LIFE TIPS', job: 'CAREER TIPS', cheese: 'AI CAREER', music1963: 'MUSIC 1963', japan: 'JAPAN TIPS',
-    };
-    const catLabel = CAT_LABEL[opts.category] || opts.category.toUpperCase();
-
-    // ── 全スライド共通: アクセントライン（上部） ──────────────────
-    filters.push(`drawbox=x=0:y=0:w=1080:h=6:color=${theme.accent}@0.95:t=fill`);
-
-    // ── 全スライド共通: サイト名ロゴ（下部中央固定） ──────────────
-    filters.push(...dt(font, theme.siteName, 30, theme.accent, CENTER_X, 1840, 'gte(t,0)', '1'));
-    filters.push(`drawbox=x=0:y=1912:w=1080:h=6:color=${theme.accent}@0.9:t=fill`);
-
-    // ── 全スライド共通: プログレスバー ─────────────────────────────
-    filters.push(`drawbox=x=0:y=1914:w='min(1080,1080*t/${duration})':h=6:color=${theme.accent}@0.7:t=fill`);
-
-    // ─── スライド0: タイトル ──────────────────────────────────────
-    {
-      const { start, end } = slides[0];
-      const en = `between(t,${start},${end})`;
-      const fi = `min(1,(t-${start})*8)`;
-
-      // カテゴリラベル（左寄せ・小）
-      filters.push(...dt(font, catLabel, 28, theme.accent, LEFT, 120, en, fi));
-
-      // タイトル（左寄せ・大）
-      const titleLines = wrapText(opts.title, 20);
-      const titleCount = Math.min(titleLines.length, 3);
-      const titleStartY = 220;
-      titleLines.slice(0, titleCount).forEach((line, i) => {
-        filters.push(...dt(font, line, 64, 'white', LEFT, titleStartY + i * 80, en, `min(1,(t-${start + i * 0.08})*8)`));
-      });
-
-      // アクセントライン（タイトル下）
-      const underlineY = titleStartY + titleCount * 80 + 12;
-      filters.push(`drawbox=x=${LEFT}:y=${underlineY}:w=920:h=3:color=${theme.accent}@0.8:t=fill:enable='${en}'`);
-    }
-
-    // ─── スライド1〜N: 各ポイント ─────────────────────────────────
-    points.forEach((point, i) => {
-      const { start, end } = slides[i + 1];
-      const en = `between(t,${start},${end})`;
-      const fi = (delay = 0) => `min(1,(t-${start + delay})*8)`;
-
-      // ポイント番号バッジ（左）
-      const numLabel = `${i + 1} / ${N}`;
-      filters.push(...dt(font, numLabel, 26, theme.accent, LEFT, 100, en, fi(0)));
-
-      // ポイント本文（左寄せ・大）
-      const [headline, ...rest] = point.split('\n');
-      const cleanHeadline = headline.replace(/^[①②③④⑤\d][.．\s]*/u, '');
-      const headLines = wrapText(cleanHeadline, 20);
-      const headCount = Math.min(headLines.length, 3);
-
-      const headStartY = 200;
-      headLines.slice(0, headCount).forEach((line, li) => {
-        filters.push(...dt(font, line, 60, 'white', LEFT, headStartY + li * 74, en, fi(0.06 * li)));
-      });
-
-      // サブテキスト（左寄せ・小）
-      const subText = rest.join(' ').replace(/^→\s*/, '');
-      if (subText) {
-        const subLines = wrapText(subText, 26);
-        const subStartY = headStartY + headCount * 74 + 30;
-        subLines.slice(0, 3).forEach((line, li) => {
-          filters.push(...dt(font, line, 42, theme.accent, LEFT, subStartY + li * 56, en, fi(0.15 + li * 0.06)));
-        });
-      }
-
-      // ヒント（左寄せ・下部）
-      filters.push(...dt(font, 'いいね＆チャンネル登録お願いします', 24, 'white', LEFT, 1770, en, fi(0.4)));
-    });
-
-    // ─── CTAスライド ─────────────────────────────────────────────
-    {
-      const { start, end } = slides[slides.length - 1];
-      const en = `between(t,${start},${end + 1})`;
-      const fi = (d = 0) => `min(1,(t-${start + d})*8)`;
-
-      // CTAボックス（左寄せ）
-      filters.push(`drawbox=x=60:y=550:w=960:h=650:color=${theme.bgSlide}@0.92:t=fill:enable='${en}'`);
-      filters.push(`drawbox=x=60:y=550:w=6:h=650:color=${theme.accent}@1:t=fill:enable='${en}'`);
-
-      // CTAテキスト
-      const ctaMain = esc(opts.ctaText).slice(0, 22) || 'チャンネル登録';
-      filters.push(...dt(font, ctaMain, 44, 'white', LEFT, 600, en, fi(0.05)));
-      filters.push(...dt(font, opts.siteUrl.slice(0, 30), 34, theme.accent, LEFT, 680, en, fi(0.12)));
-      filters.push(...dt(font, 'いいね＆チャンネル登録お願いします', 30, 'white', LEFT, 760, en, fi(0.2)));
-      filters.push(...dt(font, 'コメントで感想を教えてください', 26, theme.accent, LEFT, 820, en, fi(0.28)));
-    }
-
-    // ── FFmpeg実行 ────────────────────────────────────────────────
     const ttsPath = join(tmpDir, 'tts.wav');
     const outPath = join(tmpDir, 'canvas.mp4');
     await writeFile(ttsPath, ttsBuffer);
 
+    // アクセントカラーのHEXを数値に分解（drawbox用）
+    const accHex = theme.accent.replace(/^0x/, '');
+    const accR = parseInt(accHex.slice(0, 2), 16);
+    const accG = parseInt(accHex.slice(2, 4), 16);
+    const accB = parseInt(accHex.slice(4, 6), 16);
+    const accColor = `${accR}/${accG}/${accB}`;
 
-    // シンプルな単色背景（gradients lavfiはVercel Linuxで非対応のためcolorフィルターを使用）
-    // BGM混合はamixのVercel互換問題があるため、TTS音声のみ使用
+    // フィルター: drawbox のみ（drawtext不使用）
+    // 上部アクセントバー + 下部アクセントバー + プログレスバー
+    const filterComplex = [
+      // 背景 → [base]
+      '[0:v]copy[base]',
+      // 上部バー (8px)
+      `[base]drawbox=x=0:y=0:w=1080:h=8:color=${ac}@0.95:t=fill[v1]`,
+      // 下部バー (8px)
+      `[v1]drawbox=x=0:y=1912:w=1080:h=8:color=${ac}@0.90:t=fill[v2]`,
+      // カテゴリブランドバー（中央横ライン）
+      `[v2]drawbox=x=0:y=960:w=1080:h=2:color=${ac}@0.5:t=fill[v3]`,
+      // プログレスバー（下部）
+      `[v3]drawbox=x=0:y=1920:w='min(1080\\,1080*t/${duration})':h=6:color=${ac}@0.7:t=fill[vid]`,
+    ].join(';');
+
     await execFileAsync(ffmpeg, [
       '-y',
       '-f', 'lavfi',
-      '-i', `color=c=${theme.bg1}:size=1080x1920:rate=30:duration=${duration + 2}`,
+      '-i', `color=c=${bg}:size=1080x1920:rate=30:duration=${duration + 2}`,
       '-i', ttsPath,
-      '-filter_complex', [
-        bgMovieFilter + ';',
-        `[base]${filters.join(',')}[vid]`,
-      ].join(''),
+      '-filter_complex', filterComplex,
       '-map', '[vid]',
       '-map', '1:a',
       '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
