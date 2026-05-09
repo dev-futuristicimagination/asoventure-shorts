@@ -23,7 +23,13 @@
       "category": "finance",
       "videoUrl": "https://www.youtube.com/watch?v=a-1MybZDRZY",
       "processedAt": "2026-05-09T01:06:08.520Z"
+    },
+    {
+      "url": "https://education.asoventure.jp/glossary/generative-ai-infrastructure",
+      "category": "education",
+      "videoUrl": "https://www.youtube.com/watch?v=0qdr2YEx5xs",
+      "processedAt": "2026-05-09T01:11:16.719Z"
     }
   ],
-  "lastUpdated": "2026-05-09T01:06:08.520Z"
+  "lastUpdated": "2026-05-09T01:11:16.719Z"
 }
