@@ -293,7 +293,7 @@ export async function phaseCanvas(
       siteUrl: item.siteUrl,
       fullUrl: item.fullUrl,
       ctaText: item.ctaText,
-      lang: item.lang ?? 'ja',
+      lang: item.lang ?? 'ja', bgImageUrl: item.bgImageUrl,
     });
 
     // YouTube投稿
