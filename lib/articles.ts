@@ -176,23 +176,37 @@ export async function fetchLatestArticles(category: string, limit = 5): Promise<
   const baseUrl = CATEGORY_SITE_MAP[category];
   if (!baseUrl) return [];
 
-  // 1. RSS フィードを試みる
+    // 1. Try RSS feed
   for (const path of RSS_PATHS) {
-    try {
-      const res = await fetch(`${baseUrl}${path}`, {
-        signal: AbortSignal.timeout(6000),
-        headers: { 'User-Agent': 'AsoventureBot/1.0' },
-      });
-      if (!res.ok) continue;
-      const xml = await res.text();
-      const items = parseRSSItems(xml, limit);
-      if (items.length > 0) {
-        console.log(`[Articles] RSS: ${items.length}件 from ${baseUrl}${path}`);
-        return items;
-      }
-    } catch {
-      continue;
-    }
+        try {
+                const res = await fetch(`${baseUrl}${path}`, {
+                          signal: AbortSignal.timeout(6000),
+                          headers: { 'User-Agent': 'AsoventureBot/1.0' },
+                });
+                if (!res.ok) continue;
+                const xml = await res.text();
+                const items = parseRSSItems(xml, limit);
+                if (items.length > 0) {
+                          console.log(`[Articles] RSS: ${items.length} from ${baseUrl}${path}`);
+                          // Enrich RSS with ogImage
+                          const enriched = await Promise.all(
+                                      items.slice(0, 3).map(async (item) => {
+                                                    if (item.ogImage) return item;
+                                                    try {
+                                                                    const { ogImage } = await scrapeArticlePage(item.url);
+                                                                    return { ...item, ogImage };
+                                                    } catch {
+                                                                    return item;
+                                                    }
+                                      })
+                                    );
+                          return [...enriched, ...items.slice(3)];
+                }
+        } catch {
+                continue;
+        }
+  }
+  
   }
 
   // 2. sitemap.xml + ページスクレイプ（RSSがない全サービス用）
