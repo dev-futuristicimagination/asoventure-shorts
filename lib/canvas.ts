@@ -79,7 +79,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       title: opts.title,
       points: opts.points,
       siteUrl: opts.siteUrl,
-      ctaText: opts.ctaText,
+      ctaText: opts.ctaText, bgImageUrl: opts.bgImageUrl,
     });
     console.log(`[Canvas v10] フレームPNG: ${framePng.length} bytes`);
 
