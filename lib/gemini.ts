@@ -1,4 +1,5 @@
 // lib/gemini.ts — 動的コンテンツ生成（Gemini 2.5 Flash）
+// 【2026-05-10 プロデューサー改訂】タイトル勝ちフォーマット強制 + YouTube説明欄最適化
 
 const GEMINI_API = 'https://generativelanguage.googleapis.com';
 
@@ -19,14 +20,63 @@ const CATEGORY_LABEL: Record<string, string> = {
   finance: 'お金・投資', education: '学習・スキルアップ', life: 'ライフスタイル', music1963: '昭和歌謡・音楽',
 };
 
+// ─── 【2026-05-10 追加】カテゴリ別タイトル勝ちフォーマット ────────────────
+// 実データ分析から導出した「再生数が取れるタイトルパターン」
+// 290回「上司・同僚に好かれる職場コミュニケーション5つのコツ」= 数字+具体名詞が最強
+// 0回「失敗する人の共通点」= 抽象的な否定フレームはNG
+const TITLE_FORMAT_RULES: Record<string, string> = {
+  cheese: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「ES自動生成！就活生が知らないAIの使い方5選」「ガクチカ0分で完成！LINE AIコーチが革命的すぎた」
+✅ 型: 【数字+具体名詞】または【インパクトワード+具体的体験】
+❌ NGワード: 「失敗する人の〜」「〜とは？」「〜について」「共通点」（抽象的すぎる）
+必須要素: 数字(5選/3つ/○分)か具体的行動を含む`,
+
+  job: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「就活生必見！面接で好印象を与えるコツ5選」「ガクチカが書けない人がやりがちなNG3つ」
+✅ 型: 【就活生必見/内定者直伝】+【数字+具体場面】
+❌ NGワード: 「プレッシャー」「辛い」「悩み」「共通点」（感情系・抽象系はスルーされる）
+必須要素: ターゲット明示（就活生・大学生）+ 数字`,
+
+  health: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「自律神経を整える生活習慣5選」「睡眠の質が上がる！寝る前ルーティン3つ」
+✅ 型: 【○○を改善する△選】または【○○が激変した方法N選】
+❌ NGワード: 「〜の共通点」「〜とは？」「知らないと損」（Search意図と合わない）
+必須要素: 数字(5選/3つ)+ 具体的な体の部位や状態`,
+
+  finance: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「GW明けの家計リセット法5選！」「副業65万控除！会社員が手取り増やす方法」
+✅ 型: 【具体的な金額・数字】+【手取り/節約/増やす方法】
+❌ NGワード: 「知っておくべき」「理由」「共通点」「とは？」
+必須要素: 具体的な金額や数字を必ず含む（65万・月5万・455万など）`,
+
+  education: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「TOEIC800点を3ヶ月で取る勉強法5選」「英単語を最速で覚えるコツ3つ」
+✅ 型: 【目標スコア/期間】+【方法・コツN選】
+❌ NGワード: 「学習の重要性」「勉強すべき理由」「知らないと損」
+必須要素: 具体的な資格名・スコア・期間`,
+
+  life: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「GW明け！習い事費用見直し術5選」「一人暮らしで月1万節約できた方法3つ」
+✅ 型: 【具体的なシーン/時期】+【節約/改善/方法N選】
+❌ NGワード: 「暮らしを豊かに」「生活の知恵」「共通点」
+必須要素: 具体的な金額か時期（GW明け/春/初夏）`,
+
+  music1963: `タイトルフォーマット（必ず以下の型を使う）:
+✅ 良い例: 「さだまさし名曲ランキング！昭和の心に刻まれた歌3選」「昭和歌謡の神曲TOP5！あなたは何曲知ってる？」
+✅ 型: 【アーティスト名/年代】+【ランキング・TOP・名曲N選】
+❌ NGワード: 「〜の軌跡」「〜の影響」「〜とは？」（具体性がない）
+必須要素: ランキング番号・アーティスト名・「昭和」キーワード`,
+};
+
 export async function generateDynamicContent(
   topic: string,
   baseNarration: string,
   category: string
-): Promise<{ narration: string; youtubeDescription: string }> {
+): Promise<{ narration: string; youtubeDescription: string; title?: string }> {
   const key = process.env.GEMINI_API_KEY!;
   const label = CATEGORY_LABEL[category] || category;
   const goal = CATEGORY_GOAL[category] || '目的: チャンネル登録獲得。30秒完結tipsとして動画内で完結させる。ナレーション末尾: 「いいね👍とチャンネル登録で毎日tips！コメントで感想を教えて！」';
+  const titleRules = TITLE_FORMAT_RULES[category] || '';
 
   const prompt = `あなたはYouTube Shortsのコンテンツプロデューサーです。
 カテゴリ: ${label}
@@ -41,8 +91,13 @@ export async function generateDynamicContent(
 - チャンネル登録誘導: 「チャンネル登録で毎日tips！」を含める
 - コメント誘導: 視聴者が答えやすい質問（Yes/No or 一言で答えられるもの）を最後に入れる
 
+【タイトル生成ルール（必須）】
+${titleRules || '数字+具体的な行動・場面を組み合わせたタイトルを生成。「〜5選」「〜3つのコツ」「〜する方法」などの型を使う。'}
+- Shortsハッシュタグ: タイトルの末尾に「 #Shorts」を必ず付ける
+
 以下をJSON形式で返してください:
 {
+  "title": "上記フォーマットルールに従った動画タイトル（40文字以内）末尾に #Shorts を付ける",
   "narration": "上記ゴールに沿って、共感・具体性・フックを強化した30秒以内の自然な日本語ナレーション。エンゲージメント誘導（いいね・チャンネル登録・コメント）を末尾に含める。100文字以内。",
   "youtubeDescription": "YouTube説明欄用テキスト3〜4文。トピックの背景・具体的なtips・視聴者へのメッセージ。上記ゴールのCTAを最後に含める。200文字以内。"
 }
@@ -62,7 +117,7 @@ JSONのみ返してください。`;
     );
     const json = await res.json() as { candidates?: Array<{ content: { parts: Array<{ text: string }> } }> };
     const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = JSON.parse(text) as { narration: string; youtubeDescription: string };
+    const parsed = JSON.parse(text) as { narration: string; youtubeDescription: string; title?: string };
     if (parsed.narration && parsed.youtubeDescription) return parsed;
   } catch (e) {
     console.warn(`[shorts] 動的生成失敗 → ベース使用: ${e}`);
