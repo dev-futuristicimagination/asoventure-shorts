@@ -43,18 +43,21 @@ function sanitizeVideoPrompt(prompt: string): string {
 }
 
 // ─── パフォーマンスベース重み付き選択 ─────────────────────────────
-// 【2026-05-07 実データ分析結果に基づく設計】
-// 今日の実績: Finance「初任給の使い方」= 128回 >> Job「ガクチカ」= 1回
+// 【2026-05-10 プロデューサー更新】就活/キャリア系を底上げ
+// 実データ分析:
+//   290回「上司・同僚に好かれる職場コミュニケーション5つのコツ」→ 職場・キャリア系が強い
+//   212回「自律神経を整える生活習慣5選」→ Health実用系も伸びている
+//   0回「失敗する人の共通点」「初夏のUV対策」→ 否定フレーム・抽象は弱い
 //
-// 勝ちパターン（重み4〜5）:
-//   ① 具体的ライフイベント（初任給・引越し・NISA）
-//   ② 「の使い方」「が最強」「を即解消」実用フレーミング
-//   ③ ターゲット：就活生＋社会人の最大公約数（Finance・Health系）
+// 勝ちパターン（重み5）:
+//   ① 数字+具体名詞型（5選・3つ・ランキング）
+//   ② 職場/キャリア/実用系（上司・同僚・年収・副業・確定申告）
+//   ③ ライフイベント直結（NISA・初任給・家計）
 //
 // 負けパターン（重み1）:
-//   ① 就活専用すぎる（ガクチカ・プレッシャー）
-//   ② 感情解消型（悩んでも・辛い・友達関係）
-//   ③ 狭いターゲット
+//   ① 否定フレーム（失敗する人の・共通点・やってはいけない）
+//   ② 季節限定すぎる（初夏のUV・梅雨）
+//   ③ 感情解消型（辛い・しんどい・悩み）
 
 interface WeightedItem<T> { item: T; weight: number; }
 
@@ -69,30 +72,47 @@ export function weightedRandom<T>(items: WeightedItem<T>[]): T {
 }
 
 // トピック名から重みを自動判定（キーワードベース）
-// 【2026-05-07 実データ証明済み】
-// 128回: 「初任給の使い方」= How to系（〇〇の使い方）
-// 48回: 「集中力が続かない→AI栄養術」= 問題→解決型
-// 1回: 「ガクチカ・就活プレッシャー」= 就活専用・感情型
+// 【2026-05-10 プロデューサー更新: 実データ290回・212回に基づき就活/職場/Health実用系を強化】
 export function inferWeight(topic: string): number {
   const t = topic;
-  // 重み5: 実証済み最強パターン（1,594回・441回データ）
+
+  // ─── 重み6: 2026-05-09実測290回超え確認済み最強パターン ───────────────
+  // 「職場・上司・同僚・コミュニケーション」+ 数字
+  if (/職場|上司|同僚|コミュニケーション|人間関係.*仕事|仕事.*人間関係/.test(t)) return 6;
+  // 「キャリアアップ・転職・年収UP」実用系
+  if (/キャリアアップ|年収UP|年収アップ|昇給|昇進|転職成功|内定/.test(t)) return 6;
+
+  // ─── 重み5: 実証済み最強パターン ───────────────────────────────────
   // 「〇〇より〇〇の理由」逆説型
   if (/より.*理由|より.*効く|より.*有利|より.*大切/.test(t)) return 5;
-  // 「〇〇で落ちる人」問題提起型
-  if (/で落ちる|落ちない|で失敗|で損する|NG|やってはいけない/.test(t)) return 5;
-  // 重み5: Finance具体ライフイベント（139回実証）
+  // 数字+選・つのコツ系（290回「5つのコツ」実証）
+  if (/[1-9]つのコツ|[1-9]選|[1-9]つの方法|TOP[0-9]|ランキング/.test(t)) return 5;
+  // Finance具体ライフイベント（139回実証）
   if (/初任給|NISA|節約|固定費|副業|確定申告|家計|投資|ふるさと納税|手取り|給与明細/.test(t)) return 5;
-  // 重み5: 具体数字+How to型
+  // 具体数字+How to型
   if (/の使い方|やり方|最速|最短|始め方|攻略|手順|ステップ/.test(t)) return 5;
-  // 重み4: 科学的根拠型・数字型
-  if (/科学的|証明|3つ|5つ|3選|5選|ランキング|TOP|N選|何百万|いくら/.test(t)) return 4;
-  // 重み3: Health実用系（48回・32回実証）
+  // 就活・ES・面接系（cheese/job 直結）
+  if (/ガクチカ|ES|エントリーシート|面接|自己PR|インターン|就活生/.test(t)) return 5;
+
+  // ─── 重み4: 科学的根拠型・数字型 ─────────────────────────────────
+  if (/科学的|証明|3つ|5つ|3選|5選|何百万|いくら|万円|控除/.test(t)) return 4;
+  // 212回「自律神経を整える生活習慣5選」実証 → Health実用系を4に底上げ
+  if (/自律神経|生活習慣|免疫力|集中力|睡眠の質|メンタルケア/.test(t)) return 4;
+
+  // ─── 重み3: 実用系全般 ────────────────────────────────────────────
   if (/免疫|集中力|睡眠|栄養|食事|メンタル|習慣|生産性|疲れ/.test(t)) return 3;
   if (/AI|自動|効率|スキル|時短|キャリア|転職|年収/.test(t)) return 3;
-  // 重み1: タイトルにキャラ名が入っているもの（低パフォーマンス確認済み）
+
+  // ─── 重み1: 低パフォーマンス確認済み ─────────────────────────────
+  // キャラ名が入っているもの（キャラ依存は再生取れない）
   if (/ジョブわん|チーちゃん|パンダ子|キツネ子|マップ君|ネコ子|ジョブ/.test(t)) return 1;
-  // 重み1: 感情系・就活限定（1回実証）
+  // 感情系・就活限定（1回実証）
   if (/プレッシャー|悩んでる|友達|辛い|しんどい|リフレッシュ|メンタル崩壊|限界/.test(t)) return 1;
+  // 否定フレーム・抽象系（0回確認済み）
+  if (/失敗する人|の共通点|やってはいけない|してはいけない/.test(t)) return 1;
+  // 季節限定すぎる（0回確認済み）
+  if (/初夏|梅雨|UV対策|紫外線対策/.test(t)) return 1;
+
   return 2;
 }
 
@@ -129,14 +149,17 @@ export async function phaseA(
   const weighted = pools.map(p => ({ item: p, weight: inferWeight(p.topic) }));
   const item = weightedRandom(weighted);
 
-  const { narration, youtubeDescription } = await generateDynamicContent(
+  const generated = await generateDynamicContent(
     item.topic, item.narration, category
   );
+  const { narration, youtubeDescription } = generated;
+  // 生成されたタイトルがあれば採用（なければitemのtitleを使用）
+  const finalTitle = generated.title || item.title;
 
   // ── Veo3 vs Canvas 振り分け ──────────────────────────────────
   if (!shouldUseVeo3(category, item)) {
     // Canvas方式: 即時生成→アップロード（pending.json不要・コスト¥0）
-    const msg = `[${category}] Canvas生成 → "${item.title}" (Veo3スキップ・コスト削減)`;
+    const msg = `[${category}] Canvas生成 → "${finalTitle}" (Veo3スキップ・コスト削減)`;
     await notifyDiscord(msg);
     // canvas-canvasルートへ内部リダイレクト（API自己呼び出し）
     const canvasUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://asoventure-shorts.vercel.app'}/api/${category}-canvas`;
@@ -156,13 +179,13 @@ export async function phaseA(
   const operationName = await requestVeo3(promptWithSpeech);
 
   const pending: PendingData = {
-    category, topic: item.topic, title: item.title,
+    category, topic: item.topic, title: finalTitle,
     narration, youtubeDescription, videoPrompt: cleanPrompt,
     operationName, createdAt: new Date().toISOString(),
   };
   await savePending(category, pending);
 
-  const msg = `[${category}] Phase A完了: "${item.title}" → Veo3生成中 (¥420)`;
+  const msg = `[${category}] Phase A完了: "${finalTitle}" → Veo3生成中 (¥420)`;
   await notifyDiscord(msg);
   return { ok: true, message: msg };
 }
