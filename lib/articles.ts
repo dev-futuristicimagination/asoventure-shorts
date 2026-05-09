@@ -247,3 +247,162 @@ export async function fetchLatestArticles(category: string, limit = 5): Promise<
   console.warn(`[Articles] Failed to fetch articles for ${category}`);
     return [];
 }
+
+// ─── generateCanvasItemFromArticle（Julesにより削除→復元 2026-05-10）────────
+// 記事データをGeminiでCanvasItem形式に変換する
+export async function generateCanvasItemFromArticle(
+  article: FetchedArticle,
+  category: string
+): Promise<CanvasItem> {
+  const prompt = `以下の記事に、YouTube Shorts用のCanvas動画コンテンツを作成してください。
+
+記事タイトル: ${article.title}
+記事の内容（抜粋）: ${article.excerpt}
+記事URL: ${article.url}
+カテゴリ: ${category}
+
+以下をJSON形式で出力してください（コードブロックや他のテキストは不要、JSONのみ）:
+{
+  "title": "タイトル（25文字以内・インパクトのある端的なタイトル・数字を含む）",
+  "narration": "ナレーション（60〜80文字・記事の核心・最後に「詳しくは記事をチェック！」で終わる）",
+  "points": [
+    "① ポイント（10文字以内）\\n→ 補足説明（20文字以内）",
+    "② ポイント\\n→ 補足",
+    "③ ポイント\\n→ 補足",
+    "④ ポイント\\n→ 補足",
+    "⑤ ポイント\\n→ 補足"
+  ]
+}
+
+注意:
+- タイトルは「〇〇の方法N選！」「〇〇〇が重要な理由」「〇〇で失敗しない秘訣」的な具体的型
+- 記事に書いていないことは書かない
+- ポイントは記事の要約として機能させる
+`;
+
+  const text = (await callGemini(prompt)).trim();
+
+  // JSONパース（コードブロック対応）
+  const jsonMatch = text.match(/\{[\s\S]+\}/);
+  if (!jsonMatch) throw new Error('Gemini did not return valid JSON for article canvas');
+  const parsed = JSON.parse(jsonMatch[0]) as {
+    title: string;
+    narration: string;
+    points: string[];
+  };
+
+  const baseUrl = CATEGORY_SITE_MAP[category] || 'https://job.asoventure.jp';
+
+  return {
+    topic: article.title,
+    title: parsed.title,
+    narration: parsed.narration,
+    points: parsed.points,
+    siteUrl: new URL(article.url).hostname,
+    fullUrl: `${article.url}?utm_source=youtube&utm_medium=canvas&utm_campaign=${category}`,
+    ctaText: `📖 記事を読む`,
+    lang: 'ja',
+    bgImageUrl: article.ogImage, // 記事OGP画像 → 背景に使用
+  };
+}
+
+// ─── FALLBACK_CANVAS（Julesにより削除→復元 2026-05-10）─────────────────────
+// RSS/Sitemap取得失敗時のスタティックプール（全カテゴリ用意）
+export const FALLBACK_CANVAS: Record<string, CanvasItem> = {
+  health: {
+    topic: '科学的な健康習慣',
+    title: '科学的に証明された健康習慣5選！',
+    narration: '健康な体は積み上げた習慣から生まれます。運動・食事・睡眠の基本3つ揃えるだけで体質が変わります。詳しくは記事をチェック！',
+    points: [
+      '① 7時間の睡眠\n→ 記憶力と集中力の基礎',
+      '② 食後の軽い運動\n→ 血糖値スパイクUP防止',
+      '③ 1日8000歩目標\n→ 全身機能を自然に維持',
+      '④ 水を1.5L以上\n→ 疲労回復と代謝に必須',
+      '⑤ 就寝2時間前スマホ断ち\n→ 睡眠の質で翌日が変わる',
+    ],
+    siteUrl: 'health.asoventure.jp',
+    fullUrl: 'https://health.asoventure.jp?utm_source=youtube&utm_medium=canvas',
+    ctaText: '💪 健康記事を読む',
+    lang: 'ja',
+  },
+  job: {
+    topic: '就活・転職で失敗しないための準備',
+    title: '転職・就活で差がつく方法5選！',
+    narration: '採用面接で評価されるのはスキルじゃなく「再現性のある経験の語り方」です。業界と企業によって刺さる人物像は全く違います。詳しくは記事をチェック！',
+    points: [
+      '① 自己分析は他者評価\n→ では気づかない強みを発見',
+      '② 「転職理由は何割本音」\n→ なら 通過率の核心',
+      '③ ガクチカは行動ファースト\n→ 行動の数字は3倍になる',
+      '④ 逆質問を3つ用意\n→ 意欲最後のチャンス',
+      '⑤ 企業研究は同時進行\n→ ライバルに差をつける',
+    ],
+    siteUrl: 'job.asoventure.jp',
+    fullUrl: 'https://job.asoventure.jp?utm_source=youtube&utm_medium=canvas',
+    ctaText: '📖 就活・転職記事を読む',
+    lang: 'ja',
+  },
+  finance: {
+    topic: '20代から始めるお金の基本',
+    title: '20代でやるべき習慣5選！',
+    narration: '20代でのお金の使い方を間違えると10年後に大きな差がつきます。まずNISAで毎月1万円の積み立てを始めること。これが最もカンタンで最も効果的な投資です。詳しくは記事をチェック！',
+    points: [
+      '① NISA口座開設\n→ 毎月1万円積立スタート',
+      '② 固定費を毎月\n→ スマホだけで月3,000円削減',
+      '③ 先取り貯金\n→ 給与振込日に自動で決まる',
+      '④ ふるさと納税の活用\n→ 年収の20%がお得で返ってくる',
+      '⑤ iDeCoで節税しながら貯蓄\n→ 最も賢い老後資産形成',
+    ],
+    siteUrl: 'finance.asoventure.jp',
+    fullUrl: 'https://finance.asoventure.jp?utm_source=youtube&utm_medium=canvas',
+    ctaText: '💰 お金の記事を読む',
+    lang: 'ja',
+  },
+  education: {
+    topic: 'AIの最強学習法',
+    title: 'AIを使った最強学習法5選！',
+    narration: 'AIで勉強法は従来と大きく変わります。ChatGPTとGeminiを使えば、わからない内容も数秒で教えてもらえます。詳しくは記事をチェック！',
+    points: [
+      '① AIに問いかけてもらう\n→ アウトプットが記憶定着3倍',
+      '② 25分集中×5回休憩\n→ ポモドーロで集中を維持',
+      '③ 学んだことを声に出す\n→ 語る記憶力が大幅UP',
+      '④ 寝る20分前に復習\n→ 睡眠中に記憶が定着',
+      '⑤ 資格取得は経験\n→ 採用面接で武器になる',
+    ],
+    siteUrl: 'education.asoventure.jp',
+    fullUrl: 'https://education.asoventure.jp?utm_source=youtube&utm_medium=canvas',
+    ctaText: '📚 学習記事を読む',
+    lang: 'ja',
+  },
+  life: {
+    topic: '一人暮らしを快適にする生活術',
+    title: '一人暮らしで快適に暮らす術5選！',
+    narration: '一人暮らしは自由な反面、管理も全て自分。料理・掃除・収納3つの仕組み化だけで暮らしの質が激変します。詳しくは記事をチェック！',
+    points: [
+      '① まとめ食べで食費30%削減\n→ 週2時間で楽になる',
+      '③ 起床時刻を固定する\n→ 活動力リズムUP',
+      '③ 15分で掃除完了\n→ 5つの動線ルーティン',
+      '④ 出費を3分類に分ける\n→ 固定・変動・貯蓄で管理',
+      '⑤ 週1は外出必須\n→ 孤独防止とメンタル',
+    ],
+    siteUrl: 'life.asoventure.jp',
+    fullUrl: 'https://life.asoventure.jp?utm_source=youtube&utm_medium=canvas',
+    ctaText: '🌱 暮らしの記事を読む',
+    lang: 'ja',
+  },
+  music1963: {
+    topic: '昭和の名曲と時代背景',
+    title: '昭和の名曲5つの理由',
+    narration: '昭和の流行歌には現代音楽にない魅力があります。シンプルなメロディと心に染みる歌詞が、時代を超えて愛され続ける秘密です。詳しくは記事をチェック！',
+    points: [
+      '① メロディが覚えやすい\n→ シンプルな進行が記憶に残る',
+      '② あの時代の空気感\n→ 次世代にも伝わる',
+      '③ 昭和・平成・ポップスの融合\n→ ジャンルを超えた影響力',
+      '④ 歌詞と感情が一致\n→ 年齢問わず共感が起きる',
+      '⑤ 昭和の情景と言葉の力\n→ 日本のものはずっと残る',
+    ],
+    siteUrl: 'music1963.com',
+    fullUrl: 'https://music1963.com?utm_source=youtube&utm_medium=canvas',
+    ctaText: '🎵 音楽記事を読む',
+    lang: 'ja',
+  },
+};
