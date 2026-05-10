@@ -1,0 +1,36 @@
+{
+  "updatedAt": "2026-05-10T13:00:01.356Z",
+  "source": "youtube-analytics-cron",
+  "weights": {
+    "cheese": 8,
+    "job": 8,
+    "finance": 6,
+    "music1963": 2
+  },
+  "raw": [
+    {
+      "category": "cheese",
+      "avgViews": 308,
+      "videoCount": 2,
+      "recommendedWeight": 8
+    },
+    {
+      "category": "job",
+      "avgViews": 224,
+      "videoCount": 3,
+      "recommendedWeight": 8
+    },
+    {
+      "category": "finance",
+      "avgViews": 103,
+      "videoCount": 7,
+      "recommendedWeight": 6
+    },
+    {
+      "category": "music1963",
+      "avgViews": 1,
+      "videoCount": 2,
+      "recommendedWeight": 2
+    }
+  ]
+}
