@@ -159,6 +159,33 @@ export async function addToPlaylist(
   if (!res.ok) console.warn(`[Playlist] add failed for ${category}:`, res.status);
 }
 
+// ─── 最適投稿時刻計算（予約投稿）────────────────────────────────────────
+// 【2026-05-10】YouTube Shorts は 07:00/19:00 JST が最高エンゲージメント
+// Cron がいつ実行されても、次の最適時刻に予約投稿する
+function getNextOptimalPublishTime(): string {
+  const nowUTC = Date.now();
+  const nowJST = nowUTC + 9 * 60 * 60 * 1000; // UTC→JST変換
+  const nowDate = new Date(nowJST);
+  const hour = nowDate.getUTCHours(); // JSTの時刻（UTC+9済み）
+
+  // 今日の7時/19時JST（UTC基準）
+  const todayBase = new Date(nowDate);
+  todayBase.setUTCHours(0, 0, 0, 0);
+
+  const today7am = new Date(todayBase.getTime() + 7 * 3600 * 1000); // 7:00 JST = -9h UTC
+  const today7pm = new Date(todayBase.getTime() + 19 * 3600 * 1000); // 19:00 JST
+  const tomorrow7am = new Date(todayBase.getTime() + 31 * 3600 * 1000); // 翌7:00 JST
+
+  // 現在時刻より15分以上先の最初の最適時刻を選ぶ
+  const buffer = nowUTC + 15 * 60 * 1000;
+  let target = tomorrow7am;
+  if (today7am.getTime() - nowUTC > 15 * 60 * 1000) target = today7am;
+  else if (today7pm.getTime() - nowUTC > 15 * 60 * 1000) target = today7pm;
+
+  // JSTからUTCに戻す（YouTube APIはUTCでpublishAtを受け取る）
+  const publishAtUTC = new Date(target.getTime() - 9 * 60 * 60 * 1000);
+  return publishAtUTC.toISOString();
+}
 export async function uploadToYouTube(
   token: string,
   videoBuffer: Buffer,
@@ -178,6 +205,7 @@ export async function uploadToYouTube(
     status: {
       privacyStatus: 'public',
       selfDeclaredMadeForKids: false,
+      publishAt: getNextOptimalPublishTime(), // 【2026-05-10】予約投稿: 次の7時/19時JST
     },
   };
   const form = new FormData();
