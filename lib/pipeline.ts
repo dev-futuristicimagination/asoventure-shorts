@@ -71,6 +71,23 @@ export function weightedRandom<T>(items: WeightedItem<T>[]): T {
   return items[items.length - 1].item;
 }
 
+// analytics-weights.json から動的重みを取得（inferWeight の補正に使用）
+// 【2026-05-10 プロデューサー】Analytics Cron が毎日書き出す実績ベース重みを参照
+let _analyticsWeightsCache: Record<string, number> | null = null;
+async function fetchAnalyticsWeights(): Promise<Record<string, number>> {
+  if (_analyticsWeightsCache) return _analyticsWeightsCache;
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/dev-futuristicimagination/asoventure-shorts/main/lib/analytics-weights.json'
+    );
+    if (res.ok) {
+      const data = await res.json() as { weights?: Record<string, number> };
+      _analyticsWeightsCache = data.weights || {};
+    }
+  } catch { _analyticsWeightsCache = {}; }
+  return _analyticsWeightsCache || {};
+}
+
 // トピック名から重みを自動判定（キーワードベース）
 // 【2026-05-10 プロデューサー更新: 実データ290回・212回に基づき就活/職場/Health実用系を強化】
 export function inferWeight(topic: string): number {
@@ -179,7 +196,7 @@ export async function phaseA(
   const operationName = await requestVeo3(promptWithSpeech);
 
   const pending: PendingData = {
-    category, topic: item.topic, title: finalTitle,
+    category, topic: item.topic, title: finalTitle, titleB: generated.titleB,
     narration, youtubeDescription, videoPrompt: cleanPrompt,
     operationName, createdAt: new Date().toISOString(),
   };
