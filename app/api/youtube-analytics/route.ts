@@ -1,6 +1,9 @@
-// app/api/youtube-analytics/route.ts — YouTube Analytics 自動取得 + Discord通知
+// app/api/youtube-analytics/route.ts — YouTube Analytics 自動取得 + inferWeight フィードバック
 // 【2026-05-07 実データ分析から実装】
-// 毎日の動画パフォーマンスを取得し、どのカテゴリ・フレーミングが強いかを自動分析
+// 【2026-05-10 v2 プロデューサー改訂】
+//   - 実データから inferWeight への自動フィードバック追加
+//   - カテゴリ別パフォーマンスを数値化し GitHub に analytics-weights.json を書き出し
+//   - pipeline.ts の inferWeight がこのファイルを参照して重みを動的調整
 
 import { NextResponse } from 'next/server';
 
@@ -29,8 +32,7 @@ async function getYouTubeToken(): Promise<string> {
   return data.access_token;
 }
 
-async function fetchRecentVideoStats(token: string, maxResults = 20): Promise<VideoStats[]> {
-  // 直近20本の動画を取得
+async function fetchRecentVideoStats(token: string, maxResults = 30): Promise<VideoStats[]> {
   const listRes = await fetch(
     `https://www.googleapis.com/youtube/v3/search?part=id,snippet&forMine=true&type=video&order=date&maxResults=${maxResults}`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -41,8 +43,6 @@ async function fetchRecentVideoStats(token: string, maxResults = 20): Promise<Vi
   if (!listData.items?.length) return [];
 
   const videoIds = listData.items.map(i => i.id.videoId).join(',');
-
-  // 統計データを取得
   const statsRes = await fetch(
     `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds}`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -65,33 +65,112 @@ async function fetchRecentVideoStats(token: string, maxResults = 20): Promise<Vi
   }));
 }
 
-function analyzePerformance(stats: VideoStats[]): string {
+// ─── カテゴリ判定（タイトルから推定）─────────────────────────────────────
+function detectCategory(title: string): string {
+  if (/ガクチカ|ES|自己PR|就活|面接|採用|内定|志望動機|転職|履歴書/.test(title)) return 'cheese';
+  if (/上司|職場|同僚|部下|社内|会議|残業|昇進|キャリアアップ|年収/.test(title)) return 'job';
+  if (/NISA|投資|節約|家計|貯金|副業|収入|手取り|iDeCo/.test(title)) return 'finance';
+  if (/睡眠|食事|運動|免疫|疲労|ストレス|腸活|健康|栄養/.test(title)) return 'health';
+  if (/英語|資格|勉強|TOEIC|プログラミング|学習/.test(title)) return 'education';
+  if (/暮らし|料理|掃除|整理|節約|一人暮らし/.test(title)) return 'life';
+  if (/昭和|歌謡|名曲|懐メロ|アイドル|music1963/.test(title)) return 'music1963';
+  return 'unknown';
+}
+
+// ─── inferWeight 自動フィードバック計算 ─────────────────────────────────────
+// カテゴリ別の平均再生数を基に、次の生成での推奨重みを計算
+interface CategoryWeight {
+  category: string;
+  avgViews: number;
+  videoCount: number;
+  recommendedWeight: number;
+}
+
+function computeInferWeights(stats: VideoStats[]): CategoryWeight[] {
+  const byCategory: Record<string, VideoStats[]> = {};
+  for (const v of stats) {
+    const cat = detectCategory(v.title);
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(v);
+  }
+
+  const results: CategoryWeight[] = [];
+  const allAvg = stats.reduce((s, v) => s + v.views, 0) / (stats.length || 1);
+
+  for (const [cat, videos] of Object.entries(byCategory)) {
+    if (cat === 'unknown') continue;
+    const avgViews = videos.reduce((s, v) => s + v.views, 0) / videos.length;
+    const ratio = allAvg > 0 ? avgViews / allAvg : 1;
+
+    // 重み: 平均比1.5倍以上→8、1.2倍以上→6、0.8倍以上→4、それ未満→2
+    const recommendedWeight = ratio >= 1.5 ? 8 : ratio >= 1.2 ? 6 : ratio >= 0.8 ? 4 : 2;
+    results.push({ category: cat, avgViews: Math.round(avgViews), videoCount: videos.length, recommendedWeight });
+  }
+
+  return results.sort((a, b) => b.avgViews - a.avgViews);
+}
+
+// ─── GitHub に analytics-weights.json を書き出し ───────────────────────────
+async function writeWeightsToGitHub(weights: CategoryWeight[]): Promise<void> {
+  const pat = process.env.GITHUB_PAT || process.env.GH_PAT;
+  if (!pat) {
+    console.warn('[analytics] GITHUB_PAT not set, skip writing weights');
+    return;
+  }
+
+  const data = {
+    updatedAt: new Date().toISOString(),
+    source: 'youtube-analytics-cron',
+    weights: Object.fromEntries(weights.map(w => [w.category, w.recommendedWeight])),
+    raw: weights,
+  };
+
+  const url = 'https://api.github.com/repos/dev-futuristicimagination/asoventure-shorts/contents/lib/analytics-weights.json';
+  const headers = {
+    Authorization: `Bearer ${pat}`,
+    'User-Agent': 'asoventure-shorts',
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+  };
+
+  // 既存ファイルのSHAを取得
+  let existingSha: string | undefined;
+  try {
+    const existing = await fetch(url, { headers }).then(r => r.json()) as { sha?: string };
+    existingSha = existing.sha;
+  } catch {
+    // 新規ファイル
+  }
+
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+  const body: Record<string, unknown> = {
+    message: `auto: analytics-weights 自動更新 ${new Date().toISOString().slice(0, 10)} [cron]`,
+    content,
+  };
+  if (existingSha) body.sha = existingSha;
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    console.warn('[analytics] GitHub write failed:', res.status, await res.text());
+  } else {
+    console.log('[analytics] analytics-weights.json 更新完了');
+  }
+}
+
+function analyzePerformance(stats: VideoStats[], weights: CategoryWeight[]): string {
   if (!stats.length) return '動画データなし';
 
-  // 本日の動画だけ抽出
   const today = new Date().toISOString().slice(0, 10);
   const todayVideos = stats.filter(s => s.publishedAt.startsWith(today));
-  const allVideos = stats.slice(0, 10); // 直近10本
-
-  // 勝ちパターン検出
-  const winPatterns = [
-    { pattern: /初任給|NISA|節約|固定費|家計|投資|確定申告/, label: '💰 Finance系' },
-    { pattern: /免疫|集中力|睡眠|栄養|食事/, label: '💚 Health実用系' },
-    { pattern: /の使い方|最強|科学的|証明/, label: '📐 実用フレーミング' },
-    { pattern: /AI|自動|効率/, label: '🤖 AI活用系' },
-    { pattern: /ガクチカ|就活プレッシャー|悩んで/, label: '⚠️ 就活特化（弱）' },
-  ];
+  const allVideos = stats.slice(0, 10);
 
   const topVideo = [...allVideos].sort((a, b) => b.views - a.views)[0];
   const bottomVideo = [...allVideos].sort((a, b) => a.views - b.views)[0];
   const avgViews = allVideos.reduce((s, v) => s + v.views, 0) / allVideos.length;
-
-  // フレーミング別平均
-  const patternStats = winPatterns.map(p => {
-    const matched = allVideos.filter(v => p.pattern.test(v.title));
-    const avg = matched.length ? matched.reduce((s, v) => s + v.views, 0) / matched.length : 0;
-    return `${p.label}: 平均${Math.round(avg)}回 (${matched.length}本)`;
-  });
 
   const lines = [
     `📊 **YouTube Shorts パフォーマンスレポート** ${today}`,
@@ -104,35 +183,31 @@ function analyzePerformance(stats: VideoStats[]): string {
     `⬇️ **最低**: ${bottomVideo.title}`,
     `   → ${bottomVideo.views}回再生`,
     '',
-    '**フレーミング別パフォーマンス:**',
-    ...patternStats,
+    '**📊 カテゴリ別実績 → 自動重み調整:**',
+    ...weights.map(w => `  ${w.category}: 平均${w.avgViews}回(${w.videoCount}本) → 重み${w.recommendedWeight}`),
     '',
+    '→ analytics-weights.json に自動書き出し済み（次回生成から反映）',
   ];
 
   if (todayVideos.length) {
-    lines.push('**📅 本日の動画:**');
+    lines.push('', '**📅 本日の動画:**');
     todayVideos
       .sort((a, b) => b.views - a.views)
-      .forEach(v => lines.push(`  ${v.views}回 | ${v.title.slice(0, 40)}...`));
+      .forEach(v => lines.push(`  ${v.views}回 | ${v.title.slice(0, 40)}`));
   }
 
-  // ─── Veo3昇格候補チェック（7日以内に500回超え）────────────────────
-  // 【2026-05-07 追加】昇格基準: 7日以内投稿 AND 再生500回超 AND いいね率>1%
+  // Veo3昇格候補
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const upgradeCandidate = allVideos.filter(v => {
     const likeRate = v.views > 0 ? v.likes / v.views : 0;
     return v.publishedAt >= sevenDaysAgo && v.views >= 500 && likeRate >= 0.01;
   });
-
   if (upgradeCandidate.length > 0) {
-    lines.push('', '🚀 **Veo3昇格候補（通知のみ）:**');
+    lines.push('', '🚀 **Veo3昇格候補:**');
     upgradeCandidate.forEach(v =>
       lines.push(`  ⬆️ ${v.title.slice(0, 35)} | ${v.views}回 / いいね率${Math.round((v.likes/v.views)*100)}%`)
     );
-    lines.push('  → 同トピックでVeo3版を生成することを検討してください');
   }
-
-  lines.push('', '→ 勝ちパターンをプールに反映済み（inferWeight関数）');
 
   return lines.join('\n');
 }
@@ -145,8 +220,13 @@ export async function GET(req: Request) {
 
   try {
     const token = await getYouTubeToken();
-    const stats = await fetchRecentVideoStats(token, 20);
-    const report = analyzePerformance(stats);
+    const stats = await fetchRecentVideoStats(token, 30);
+
+    // ─── inferWeight 自動フィードバック ───────────────────────────────
+    const weights = computeInferWeights(stats);
+    await writeWeightsToGitHub(weights); // 非同期でGitHubに書き出し
+
+    const report = analyzePerformance(stats, weights);
 
     // Discord に送信
     const webhook = process.env.DISCORD_WEBHOOK_URL;
@@ -161,6 +241,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       videoCount: stats.length,
+      weights,
       report,
       topVideo: stats.sort((a, b) => b.views - a.views)[0],
     });
