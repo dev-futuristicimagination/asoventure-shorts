@@ -107,10 +107,13 @@ export async function postEngagementComment(
   category: string
 ): Promise<void> {
   // カテゴリ別の整合性のあるCTAコメント（実在サービスのみ）
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const commentMap: Record<string, string> = {
-    cheese: '🧀 AIキャリアコーチ Cheese で無料診断！\n👉 LINE登録: https://lin.ee/8VAVNEk\n💬 就活・転職の悩みをAIに相談しよう！\n\n👍 いいね & 🔔 チャンネル登録よろしくお願いします！',
-    job:    '💼 転職・キャリアの無料相談はこちら！\n👉 https://lin.ee/8VAVNEk\n\n👍 いいね & 🔔 チャンネル登録で毎日役立つ情報をお届けします！',
-    default:'📺 チャンネル登録で毎日役立つ情報をお届け！\n\n👍 いいね & 🔔 登録よろしくお願いします！\n💬 感想・質問はコメントで！',
+    cheese:  \uD83E\uDDC0 AI\u304C\u30AC\u30AF\u30C1\u30AB\u30920\u5206\u3067\u751F\u6210\uFF01\u7121\u6599LINE\u767B\u9332\u2193\nhttps://cheese.asoventure.jp/api/line-redirect?ref=yt_cheese_{today}\n\n\uD83D\uDC4D \u3044\u3044\u306D & \uD83D\uDD14 \u30C1\u30E3\u30F3\u30CD\u30EB\u767B\u9332\u3067\u5C31\u6D3Btips\u6BCE\u65E5\uFF01,
+    job:     \uD83D\uDCBC \u8EE2\u8077\u30FB\u5C31\u6D3B\u306E\u60A9\u307F\u306FAIC\u30AD\u30E3\u30EA\u30A2\u30B3\u30FC\u30C1\u3078\uFF08\u7121\u6599\uFF09\u2193\nhttps://cheese.asoventure.jp/api/line-redirect?ref=yt_job_{today}\n\n\uD83D\uDC4D & \uD83D\uDD14 \u30C1\u30E3\u30F3\u30CD\u30EB\u767B\u9332\u3067\u9762\u63A5tips\u6BCE\u65E5\uFF01,
+    health:  \uD83D\uDCAA \u4F53\u8ABF\u7BA1\u7406\u00D7\u30AD\u30E3\u30EA\u30A2UP\uFF01\u7121\u6599\u76F8\u8AC7\u2193\nhttps://cheese.asoventure.jp?utm_source=youtube&utm_medium=comment&utm_campaign=health_{today}\n\n\uD83D\uDC4D & \uD83D\uDD14 \u30C1\u30E3\u30F3\u30CD\u30EB\u767B\u9332\u3067\u5065\u5EB7tips\u6BCE\u65E5\uFF01,
+    finance: \uD83D\uDCB0 \u5E74\u53CEUP\u306E\u8FD1\u9053\u306F\u8EE2\u8077\u00D7\u30AD\u30E3\u30EA\u30A2\u6226\u7565\uFF01\u7121\u6599\u76F8\u8AC7\u2193\nhttps://cheese.asoventure.jp?utm_source=youtube&utm_medium=comment&utm_campaign=finance_{today}\n\n\uD83D\uDC4D & \uD83D\uDD14 \u30C1\u30E3\u30F3\u30CD\u30EB\u767B\u9332\u3067\u304A\u91D1tips\u6BCE\u65E5\uFF01,
+    default: \uD83D\uDD14 \u30C1\u30E3\u30F3\u30CD\u30EB\u767B\u9332\u3067\u6BCE\u65E5\u5F79\u7ACB\u3064tips\uFF01\n\n\uD83D\uDC4D \u3044\u3044\u306D & \uD83D\uDCAC \u30B3\u30E1\u30F3\u30C8\u3067\u611F\u60F3\u3092\u6559\u3048\u3066\u306D\uFF01,
   };
   const commentText = commentMap[category] ?? commentMap.default;
 
