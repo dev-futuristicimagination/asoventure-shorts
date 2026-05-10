@@ -2,7 +2,7 @@
 // ffmpeg-static を使用してVercel serverless環境でFFmpegを実行
 
 import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
-import { getYouTubeToken, uploadToYouTube, postToBuffer, uploadCaptions, postEngagementComment, addToPlaylist, generateSRT } from './youtube';
+import { getYouTubeToken, uploadToYouTube, postToBuffer, postToBufferMultiChannel, uploadCaptions, postEngagementComment, addToPlaylist, generateSRT } from './youtube';
 
 import { savePending, loadPending, clearPending } from './github';
 import { generateDynamicContent, notifyDiscord } from './gemini';
