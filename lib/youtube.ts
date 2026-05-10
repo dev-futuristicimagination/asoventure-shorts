@@ -239,8 +239,9 @@ export async function postToBuffer(topic: string, youtubeUrl: string, category: 
   return !json.errors && !json.data?.createPost?.message;
 }
 
-// 📱 TikTok/Reels 二次展開 - Instagram・TikTokチャンネルへ同時投稿
-// BUFFER_INSTAGRAM_CHANNEL_ID / BUFFER_TIKTOK_CHANNEL_ID を設定で有効化
+
+// TikTok/Reels/Instagram multi-channel Buffer posting
+// Enable by setting BUFFER_INSTAGRAM_CHANNEL_ID and BUFFER_TIKTOK_CHANNEL_ID in Vercel env
 export async function postToBufferMultiChannel(
   topic: string,
   youtubeUrl: string,
@@ -248,48 +249,41 @@ export async function postToBufferMultiChannel(
 ): Promise<{ x: boolean; instagram: boolean; tiktok: boolean }> {
   const token = process.env.BUFFER_ACCESS_TOKEN || '';
   if (!token) return { x: false, instagram: false, tiktok: false };
-
-  const channelIds = {
-    x: process.env.BUFFER_CHANNEL_ID || '69e04b4f031bfa423c0b5e18',
-    instagram: process.env.BUFFER_INSTAGRAM_CHANNEL_ID || '',
-    tiktok: process.env.BUFFER_TIKTOK_CHANNEL_ID || '',
-  };
-
-  const ctaLine = ['cheese', 'job'].includes(category)
-    ? '🧀 AI就活コーチ Cheese: https://lin.ee/8VAVNEk'
-    : '▶️ チャンネル登録: https://www.youtube.com/@asoventure_project';
-
-  const textX = [🎵 , '', '▶️ YouTube Shorts:', youtubeUrl, '', ctaLine, '', #Shorts #].join('\n').slice(0, 280);
-  const textIG = [🎵 , '', ctaLine, '', #Shorts # #reels #asoventure].join('\n').slice(0, 2200);
-
-  async function bufferPost(channelId: string, text: string): Promise<boolean> {
-    if (!channelId) return false;
-    const res = await fetch('https://api.buffer.com/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: Bearer  },
-      body: JSON.stringify({
-        query: mutation { createPost(input: { text: , channelId: "", schedulingType: automatic, mode: addToQueue }) { ... on PostActionSuccess { post { id } } ... on MutationError { message } } },
-      }),
-    });
-    const json = await res.json() as { errors?: unknown; data?: { createPost?: { message?: string } } };
-    return !json.errors && !json.data?.createPost?.message;
+  const xChannelId = process.env.BUFFER_CHANNEL_ID || '69e04b4f031bfa423c0b5e18';
+  const igChannelId = process.env.BUFFER_INSTAGRAM_CHANNEL_ID || '';
+  const ttChannelId = process.env.BUFFER_TIKTOK_CHANNEL_ID || '';
+  const isCheese = ['cheese', 'job'].includes(category);
+  const ctaLine = isCheese
+    ? 'Cheese LINE: https://lin.ee/8VAVNEk'
+    : 'YouTube: https://www.youtube.com/@asoventure_project';
+  const textX = ['[Shorts] ' + topic, '', 'YouTube Shorts: ' + youtubeUrl, '', ctaLine, '', '#Shorts #' + category].join('\n').slice(0, 280);
+  const textIG = ['[Shorts] ' + topic, '', ctaLine, '', '#Shorts #' + category + ' #reels #asoventure'].join('\n').slice(0, 2200);
+  const gql = (chId: string, txt: string) =>
+    '{ "query": "mutation { createPost(input: { text: ' + JSON.stringify(txt).slice(1,-1) + ', channelId: \\"' + chId + '\\", schedulingType: automatic, mode: addToQueue }) { ... on PostActionSuccess { post { id } } ... on MutationError { message } } }" }';
+  async function bufferPost(chId: string, txt: string): Promise<boolean> {
+    if (!chId) return false;
+    try {
+      const r = await fetch('https://api.buffer.com/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: gql(chId, txt),
+      });
+      const j = await r.json() as { errors?: unknown; data?: { createPost?: { message?: string } } };
+      return !j.errors && !j.data?.createPost?.message;
+    } catch { return false; }
   }
-
-  const [x, instagram, tiktok] = await Promise.allSettled([
-    bufferPost(channelIds.x, textX),
-    bufferPost(channelIds.instagram, textIG),
-    bufferPost(channelIds.tiktok, textX),
+  const [rx, rig, rtt] = await Promise.allSettled([
+    bufferPost(xChannelId, textX),
+    bufferPost(igChannelId, textIG),
+    bufferPost(ttChannelId, textX),
   ]);
-
   return {
-    x: x.status === 'fulfilled' ? x.value : false,
-    instagram: instagram.status === 'fulfilled' ? instagram.value : false,
-    tiktok: tiktok.status === 'fulfilled' ? tiktok.value : false,
+    x: rx.status === 'fulfilled' ? rx.value : false,
+    instagram: rig.status === 'fulfilled' ? rig.value : false,
+    tiktok: rtt.status === 'fulfilled' ? rtt.value : false,
   };
 }
 
-// ─── 記事→X直接投稿（Article Pipeline用）────────────────────────────────
-// 動画URLなしで記事URLと生成済みX投稿文をBufferにポスト
 export async function postArticleToBuffer(xPostText: string): Promise<boolean> {
   const token = process.env.BUFFER_ACCESS_TOKEN || '';
   const channelId = process.env.BUFFER_CHANNEL_ID || '69e04b4f031bfa423c0b5e18';
