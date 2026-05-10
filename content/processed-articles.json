@@ -65,7 +65,13 @@
       "category": "job",
       "videoUrl": "https://www.youtube.com/watch?v=FvIY5ceibpc",
       "processedAt": "2026-05-10T01:21:07.933Z"
+    },
+    {
+      "url": "https://music1963.com/category/%E3%82%B7%E3%83%81%E3%83%A5%E3%82%A8%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E5%88%A5",
+      "category": "music1963",
+      "videoUrl": "https://www.youtube.com/watch?v=B5XxQZnILOE",
+      "processedAt": "2026-05-10T01:25:44.189Z"
     }
   ],
-  "lastUpdated": "2026-05-10T01:21:07.933Z"
+  "lastUpdated": "2026-05-10T01:25:44.189Z"
 }
