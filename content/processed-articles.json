@@ -47,7 +47,13 @@
       "category": "music1963",
       "videoUrl": "https://www.youtube.com/watch?v=HYOSgCwld-w",
       "processedAt": "2026-05-09T01:26:00.965Z"
+    },
+    {
+      "url": "https://education.asoventure.jp/glossary/context-understanding-ai",
+      "category": "education",
+      "videoUrl": "https://www.youtube.com/watch?v=0k43MciGvt0",
+      "processedAt": "2026-05-10T01:11:23.973Z"
     }
   ],
-  "lastUpdated": "2026-05-09T01:26:00.965Z"
+  "lastUpdated": "2026-05-10T01:11:23.973Z"
 }
