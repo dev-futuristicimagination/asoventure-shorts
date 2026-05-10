@@ -59,7 +59,13 @@
       "category": "life",
       "videoUrl": "https://www.youtube.com/watch?v=Ia7aVTTKHrE",
       "processedAt": "2026-05-10T01:15:59.244Z"
+    },
+    {
+      "url": "https://job.asoventure.jp/category/%E8%BB%A2%E8%81%B7%E3%81%AE%E5%9F%BA%E7%A4%8E%E7%9F%A5%E8%AD%98",
+      "category": "job",
+      "videoUrl": "https://www.youtube.com/watch?v=FvIY5ceibpc",
+      "processedAt": "2026-05-10T01:21:07.933Z"
     }
   ],
-  "lastUpdated": "2026-05-10T01:15:59.244Z"
+  "lastUpdated": "2026-05-10T01:21:07.933Z"
 }
