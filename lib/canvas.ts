@@ -236,6 +236,8 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
 
     // ── 音声フィルター: BGM + SE + TTS ────────────────────────────────────
     // TTS有効時: TTS音声を前面に出し BGM は環境音として後退
+    const seInputIdx = nSlides + 1; // lavfi sine source index
+    const seLabels: string[] = [];
     if (ttsPath) {
       // TTS入力インデックスはSE(lavfi)の次
       const ttsIdx = nSlides + 2;
