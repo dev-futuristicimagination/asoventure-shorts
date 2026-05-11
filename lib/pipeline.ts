@@ -334,11 +334,17 @@ export async function phaseCanvas(
 ): Promise<{ ok: boolean; message: string; youtubeUrl?: string }> {
   try {
     // Canvas動画生成（FFmpegのみ・Veo3不要）
+    // hookTitle: Gemini で疑問文フックを生成（なければtitleをそのまま使用）
+    const generated = await generateDynamicContent(item.topic, item.narration, category);
+    const finalTitle = generated.title || item.title;
+    const hookTitle  = generated.hookTitle || item.hookTitle;
+
     const videoBuffer = await generateCanvasVideo({
       category,
-      title: item.title,
+      title: finalTitle,
+      hookTitle,
       points: item.points,
-      narration: item.narration,
+      narration: generated.narration || item.narration,
       siteUrl: item.siteUrl,
       fullUrl: item.fullUrl,
       ctaText: item.ctaText,

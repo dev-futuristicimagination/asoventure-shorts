@@ -46,13 +46,44 @@ export const CANVAS_THEME: Record<string, {
 export interface CanvasOptions {
   category: string;
   title: string;
+  hookTitle?: string;   // 疑問文フック（スライド1専用）
   points: string[];
   narration: string;
   siteUrl: string;
   fullUrl: string;
   ctaText: string;
   lang?: 'ja' | 'en';
-  bgImageUrl?: string;
+  bgImageUrl?: string;  // 動的OGP（なければbg-libraryから選択）
+}
+
+// ── 背景ライブラリ: カテゴリ別事前生成画像をランダム選択 ──────────────────
+const BG_LIBRARY: Record<string, string[]> = {
+  job:       ['office_night.png', 'salary_up.png', 'resume_desk.png', 'interview.png'],
+  health:    ['forest.png', 'wellness.png'],
+  finance:   ['finance_data.png'],
+  cheese:    ['coaching.png'],
+  education: [],
+  life:      [],
+  japan:     [],
+  music1963: [],
+};
+
+async function pickBgFromLibrary(category: string, bgImageUrl?: string): Promise<string | undefined> {
+  // 動的OGP URLが指定されていればそちらを優先
+  if (bgImageUrl) return bgImageUrl;
+  // bg-library からランダム選択
+  const files = BG_LIBRARY[category] || [];
+  if (files.length === 0) return undefined;
+  const file = files[Math.floor(Math.random() * files.length)];
+  const localPath = join(process.cwd(), 'public', 'images', 'bg-library', category, file);
+  try {
+    await access(localPath, constants.R_OK);
+    // Data URI に変換して返す（frame-generator が fetch しなくて良いよう）
+    const buf = await readFile(localPath);
+    return `data:image/png;base64,${buf.toString('base64')}`;
+  } catch {
+    return undefined;
+  }
 }
 
 const VIDEO_DURATION = 15; // 秒固定（YouTube Shorts）
@@ -69,6 +100,10 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
   const accent = (CATEGORY_ACCENT[opts.category] || '#74C69D').replace('#', '');
 
+  // 背景: OGP URL → bg-library → undefined の優先順位で選択
+  const bgSource = await pickBgFromLibrary(opts.category, opts.bgImageUrl);
+  const hookSlideTitle = opts.hookTitle || opts.title.replace(/#Shorts/i, '').trim();
+
   try {
     // ── STEP 1: 5枚のスライドフレームを生成 ─────────────────────────────────
     const tips = [
@@ -78,11 +113,11 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     ];
 
     const slides: Array<{ label: string; title: string; points: string[]; isCta: boolean; slideNum?: number; totalSlides?: number }> = [
-      // スライド0: フック（問いかけ・インパクト）
+      // スライド0: フック（疑問文 hookTitle を使用）
       {
         label: 'hook',
-        title: opts.title.replace(/#Shorts/i, '').trim(),
-        points: ['👆 最後まで見てね！', '知らないと損するかも…'],
+        title: hookSlideTitle,  // ← Gemini生成の疑問文フック
+        points: [],
         isCta: false,
         slideNum: 1,
         totalSlides: 5,
@@ -110,7 +145,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         points: slide.points,
         siteUrl: opts.siteUrl,
         ctaText: slide.isCta ? (opts.ctaText || '') : '',
-        bgImageUrl: opts.bgImageUrl,
+        bgImageUrl: bgSource,  // ← bg-library から取得したData URI
         slideNum: slide.slideNum,
         totalSlides: slide.totalSlides,
       });

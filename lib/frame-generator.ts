@@ -69,6 +69,9 @@ function e(str: string): string {
 // ── 背景画像 Data URI 変換 ──────────────────────────────────────────────
 async function loadBgImageAsDataUri(bgImageUrl?: string): Promise<string | null> {
   if (!bgImageUrl) return null;
+  // すでにData URI（bg-libraryから変換済み）の場合はそのまま返す
+  if (bgImageUrl.startsWith('data:')) return bgImageUrl;
+  // HTTP URLの場合はフェッチしてData URIに変換
   try {
     const res = await fetch(bgImageUrl, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
@@ -148,16 +151,19 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
   const root: SatoriElement = div(
     { width: '1080px', height: '1920px', flexDirection: 'column',
       position: 'relative', overflow: 'hidden', fontFamily: 'NotoSansJP',
-      backgroundColor: theme.bg },
+      // bg-library画像がある場合は透明背景（sharpで合成）、ない場合はtheme.bgで塗る
+      backgroundColor: bgDataUri ? 'transparent' : theme.bg },
     [
-      // 背景OGP画像（opacity 0.55）
-      ...(bgDataUri ? [{ type: 'img', props: { src: bgDataUri, style: {
-        position: 'absolute', top: 0, left: 0,
-        width: '1080px', height: '1920px', objectFit: 'cover', opacity: 0.55,
-      } } } as SatoriElement] : []),
-      // グラデーションオーバーレイ（テキスト可読性確保）
-      div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px',
-            background: `linear-gradient(180deg, ${theme.bg}EE 0%, ${theme.bg}99 50%, ${theme.bg}EE 100%)` }, ''),
+      // bg-library画像なし時のフォールバック背景色ブロック
+      ...(bgDataUri ? [] : [div({
+        position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px',
+        backgroundColor: theme.bg,
+      }, '')]),
+      // グラデーションオーバーレイ（上下のみ暗くしてテキスト可読性確保）
+      div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '480px',
+            background: `linear-gradient(180deg, ${theme.bg}EE 0%, ${theme.bg}00 100%)` }, ''),
+      div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '480px',
+            background: `linear-gradient(0deg, ${theme.bg}EE 0%, ${theme.bg}00 100%)` }, ''),
       // アクセントライン（上・下・左・右）
       div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
       div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
@@ -235,5 +241,18 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
   const svg = await satori(root as any, { width: 1080, height: 1920, fonts: satorifonts });
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const sharp = require('sharp');
-  return await sharp(Buffer.from(svg)).png().toBuffer();
+
+  // 背景画像がある場合はsharpで合成（satoriの img タグより確実）
+  if (bgDataUri) {
+    const b64 = bgDataUri.replace(/^data:[^;]+;base64,/, '');
+    const bgBuf = Buffer.from(b64, 'base64');
+    const textLayer = await sharp(Buffer.from(svg)).png().toBuffer();
+    return await sharp(bgBuf)
+      .resize(1080, 1920, { fit: 'cover' })
+      .composite([{ input: textLayer, blend: 'over' }])
+      .png({ compressionLevel: 7, quality: 80 })
+      .toBuffer();
+  }
+
+  return await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
 }

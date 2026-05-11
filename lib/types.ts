@@ -19,6 +19,7 @@ export interface CanvasItem {
   ctaText: string;        // CTA文言 (例: "詳しくはこちら")
   lang?: 'ja' | 'en';
   bgImageUrl?: string;    // 記事OGP画像URL（背景に使用）
+  hookTitle?: string;     // 疑問文フック（スライド1専用・Gemini生成）
 }
 
 export interface PendingData {
