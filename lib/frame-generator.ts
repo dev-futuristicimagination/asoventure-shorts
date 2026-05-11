@@ -174,11 +174,21 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
       div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px',
             flexDirection: 'column', padding: '60px 60px 60px 80px' }, [
 
-        // ヘッダー: ラベル + 進捗ドット
+        // ヘッダー: ラベル + 進捗ドット + 登録バッジ（hookスライドのみ）
         div({ flexDirection: 'row', alignItems: 'center',
               justifyContent: 'space-between', marginBottom: '20px' }, [
           txt(theme.label, { fontSize: '44px', color: theme.accent, fontWeight: 'bold', letterSpacing: '2px' }),
-          div({ flexDirection: 'row', alignItems: 'center' }, dots),
+          div({ flexDirection: 'row', alignItems: 'center', gap: '16px' }, [
+            // hookスライドのみ「毎日更新中」バッジを表示（登録CTA）
+            ...(isHook ? [div({
+              backgroundColor: theme.accent,
+              borderRadius: '999px',
+              padding: '8px 20px',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }, txt('ベル 毎日更新', { color: theme.bg, fontSize: '32px', fontWeight: 'bold' }))] : []),
+            div({ flexDirection: 'row', alignItems: 'center' }, dots),
+          ]),
         ]),
         div({ width: '100%', height: '4px', backgroundColor: `${theme.accent}80`, marginBottom: '36px' }, ''),
 
