@@ -35,6 +35,7 @@
     { "path": "/api/job-canvas?phase=canvas",    "schedule": "0 22 * * *"   },
     { "path": "/api/weekly-landscape",           "schedule": "0 0 * * 1"    },
     { "path": "/api/youtube-analytics",          "schedule": "0 13 * * *"   },
+    { "path": "/api/trends-shorts",              "schedule": "0 21 * * 1-5" },
     { "path": "/api/article-pipeline?category=health",    "schedule": "0 1 * * *"  },
     { "path": "/api/article-pipeline?category=finance",   "schedule": "5 1 * * *"  },
     { "path": "/api/article-pipeline?category=education", "schedule": "10 1 * * *" },

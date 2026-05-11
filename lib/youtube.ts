@@ -27,16 +27,46 @@ export async function getYouTubeToken(): Promise<string> {
 // 実在確認済み: cheese.asoventure.jp / lin.ee/8VAVNEk / job.asoventure.jp
 // 未確認: health / finance / education / life.asoventure.jp
 //   → これらはチャンネル登録 + LINE相談のみに絞る
+// カテゴリ別検索SEOキーワードマップ
+// 【2026-05-12 プロデューサー】YouTube検索流入 2.2%→10%目標のためSEO強化
+const CATEGORY_SEO_KEYWORDS: Record<string, string[]> = {
+  cheese:    ['就活生必見', 'ガクチカ', 'ES自動生成', 'AI就活', 'オープンエントリー', 'エントリーシート', '就活金氷', 'OB訪問', 'インターン'],
+  job:       ['転職', 'キャリア', '年収アップ', '副業', 'スキルアップ', '転職面接', '職場コミュニケーション', '山内SE', '仕事術', '生産性'],
+  health:    ['健康', '自律神経', '生活習慣', '睡眠', 'ストレス解消', '集中力', '免疫力', 'メンタルケア', '高血圧', '糖尿病'],
+  finance:   ['家計', '節約', 'NISA', '投資', '副業', '手取り', '固定費削減', '確定申告', 'かけもち', '年金'],
+  education: ['勉強法', 'TOEIC', '英語', '資格', 'スキルアップ', 'オンライン学習', 'IT資格', '語学', 'AWS', 'Python'],
+  life:      ['暮らし', '一人暮らし', '節約', '料理', 'インテリア', 'ミニマリスト', '山活用品', '掃除', '洗濯'],
+  music1963: ['昭和歌謡', '歌謡曲', '名曲', 'ランキング', '昔の歌', '歌謡ヒット', 'パプリカ', '演歌家', '昇龍張幸樹', '美空ひばり'],
+};
+
 function buildDescription(
   topic: string,
   description: string,
   cta: CtaConfig
 ): string {
   const ENGAGEMENT_CTA = [
-    '👍 いいね & 🔔 チャンネル登録で毎日役立つ情報をお届け！',
-    '💬 感想・質問はコメントで教えてください↓',
+    '▶▶ チャンネル登録で毎日役立つ情報をお届け！コメントで感想も待ってます↓',
     '',
   ].join('\n');
+
+  // SEOキーワードブロック: 検索流入 2.2%→10%目標
+  const category = (cta.tags[0] || '').toLowerCase();
+  const seoWords = CATEGORY_SEO_KEYWORDS[category] ?? [];
+  const seoBlock = seoWords.length > 0
+    ? ['\n■ キーワード:', seoWords.join(' / '), ''].join('\n')
+    : '';
+
+  // ハッシュタグブロック: カテゴリ別 + Shorts + 共通
+  const hashtagMap: Record<string, string> = {
+    cheese:    '#就活 #ガクチカ #ES #AI就活 #インターン',
+    job:       '#転職 #キャリア #年収アップ #副業 #就活・転職',
+    health:    '#健康 #自律神経 #生活習慣 #メンタル #睡眠',
+    finance:   '#NISA #節約 #投資 #家計 #副業 #手取り',
+    education: '#勉強 #TOEIC #英語 #資格 #スキルアップ',
+    life:      '#暮らし #節約 #一人暮らし #料理 #ミニマリ',
+    music1963: '#昭和歌謡 #歌謡曲 #名曲 #明歌',
+  };
+  const hashtags = (hashtagMap[category] ?? '#アソベンチャー') + ' #Shorts #asoventure';
 
   const AI_DISCLOSURE = [
     '',
@@ -46,7 +76,15 @@ function buildDescription(
     '────────────────',
   ].join('\n');
 
-  return [ENGAGEMENT_CTA, topic, '', description, AI_DISCLOSURE, '', ...cta.block].join('\n');
+  return [
+    ENGAGEMENT_CTA,
+    topic, '',
+    description,
+    seoBlock,
+    AI_DISCLOSURE, '',
+    ...cta.block, '',
+    hashtags,
+  ].join('\n');
 }
 
 // ── SRT字幕生成（narrationテキストから自動生成）──────────────────────
@@ -122,7 +160,20 @@ export async function postEngagementComment(
     music1963: `🎵 昭和・平成ヒット曲ランキング全部見る👇\nhttps://music1963.com\n\nサイト名「music1963」で検索 🔍\n\n👍 & 🔔 チャンネル登録で歌謡tips毎日！`,
     default:   `🔔 チャンネル登録で毎日役立つtips！\n\nAsoventureサービス一覧👇\n${LINKTREE}\n\n👍 いいね & 💬 コメントで感想を教えてね！`,
   };
-  const commentText = commentMap[category] ?? commentMap.default;
+  // カテゴリ別エンゲージメント質問（2026-05-12 追加）
+  // コメント数0件 → アルゴリズム評価・リピーター化のための質問追加
+  const questionMap: Record<string, string> = {
+    cheese:   '\n\n❓ ガクチカ書くのに一番困ったことは何？コメントで教えて！',
+    job:      '\n\n❓ 転職で一番苦労したことは何？↓コメントで教えて！',
+    health:   '\n\n❓ 最近睡眠の質は満足できてますか？コメントで教えて！',
+    finance:  '\n\n❓ 今年までにNISA始めた人・迷ってる人↓コメントで教えて！',
+    life:     '\n\n❓ 一番効果あった節約術は何？コメントで教えて！',
+    education:'\n\n❓ 今何の勉強してますか？コメントで教えて！',
+    music1963:'\n\n❓ 好きな昭和歌謡アーティストは誰？コメントで教えて！',
+    default:  '\n\n❓ 動画を見てどう思いましたか？コメントで教えて！',
+  };
+  const question = questionMap[category] ?? questionMap.default;
+  const commentText = (commentMap[category] ?? commentMap.default) + question;
 
   const res = await fetch(
     'https://www.googleapis.com/youtube/v3/commentThreads?part=snippet',
