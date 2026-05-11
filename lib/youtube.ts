@@ -101,18 +101,26 @@ export async function uploadCaptions(
 // ── コメント自動投稿（ピン留め手順）─────────────────────────────────────
 // 注意: YouTube APIにピン留め機能はない（Studio UIのみ）
 // → 投稿直後の最初のコメントとして表示される（実質的に上位に来る）
+// 【2026-05-12 プロデューサー更新】linktr.ee 統合URLを全カテゴリに追加
+// GA4実測でShortsからの直接流入は30日21件 → 口頭CTA + linktr.ee集約リンクが最効果
 export async function postEngagementComment(
   token: string,
   videoId: string,
   category: string
 ): Promise<void> {
-  // カテゴリ別の整合性のあるCTAコメント（実在サービスのみ）
+  // linktr.ee: 全Asoventureサービスリンクを1箇所に集約
+  const LINKTREE = 'https://linktr.ee/asoventure';
+
+  // カテゴリ別CTAコメント（口頭検索 + linktr.ee）
   const commentMap: Record<string, string> = {
-    cheese:  '🧀 AIがガクチカを0分で生成！無料LINE登録↓\nhttps://cheese.asoventure.jp/api/line-redirect?ref=yt_cheese\n\n👍 いいね & 🔔 チャンネル登録で就活tips毎日！',
-    job:     '💼 転職・就活の悩みはAIキャリアコーチへ（無料）↓\nhttps://cheese.asoventure.jp/api/line-redirect?ref=yt_job\n\n👍 & 🔔 チャンネル登録で面接tips毎日！',
-    health:  '💪 体調管理×キャリアUP！無料相談↓\nhttps://cheese.asoventure.jp?utm_source=youtube&utm_medium=comment&utm_campaign=health\n\n👍 & 🔔 チャンネル登録で健康tips毎日！',
-    finance: '💰 年収UPは転職×キャリア戦略！無料相談↓\nhttps://cheese.asoventure.jp?utm_source=youtube&utm_medium=comment&utm_campaign=finance\n\n👍 & 🔔 チャンネル登録でお金tips毎日！',
-    default: '🔔 チャンネル登録で毎日役立つtips！\n\n👍 いいね & 💬 コメントで感想を教えてね！',
+    cheese:  `🧀 AIがガクチカ・ESを0分で自動生成！\n\n「Asoventure Cheese」で検索 🔍 または👇\n${LINKTREE}\n\n👍 いいね & 🔔 チャンネル登録で就活tips毎日！`,
+    job:     `💼 転職・キャリア相談はAI Cheeseへ！\n\n「Asoventure Cheese」で検索 🔍 または👇\n${LINKTREE}\n\n👍 & 🔔 チャンネル登録で転職tips毎日！`,
+    health:  `💪 Asoventureの全サービスはこちら👇\n${LINKTREE}\n\n「Asoventure」で検索 🔍\n\n👍 & 🔔 チャンネル登録で健康tips毎日！`,
+    finance: `💰 Asoventureの全サービスはこちら👇\n${LINKTREE}\n\n「Asoventure」で検索 🔍\n\n👍 & 🔔 チャンネル登録でお金tips毎日！`,
+    life:    `🌿 Asoventureの全サービスはこちら👇\n${LINKTREE}\n\n「Asoventure」で検索 🔍\n\n👍 & 🔔 チャンネル登録で暮らしtips毎日！`,
+    education: `📚 Asoventureの全サービスはこちら👇\n${LINKTREE}\n\n「Asoventure」で検索 🔍\n\n👍 & 🔔 チャンネル登録で学習tips毎日！`,
+    music1963: `🎵 昭和・平成ヒット曲ランキング全部見る👇\nhttps://music1963.com\n\nサイト名「music1963」で検索 🔍\n\n👍 & 🔔 チャンネル登録で歌謡tips毎日！`,
+    default:   `🔔 チャンネル登録で毎日役立つtips！\n\nAsoventureサービス一覧👇\n${LINKTREE}\n\n👍 いいね & 💬 コメントで感想を教えてね！`,
   };
   const commentText = commentMap[category] ?? commentMap.default;
 
@@ -306,4 +314,113 @@ export async function postArticleToBuffer(xPostText: string): Promise<boolean> {
     console.log('[Buffer] 投稿成功:', json.data?.createPost?.post?.id);
   }
   return ok;
+}
+
+// ─── 横型動画アップロード（16:9・エンドカード付き）─────────────────────────
+// 【2026-05-12 プロデューサー追加】
+// ShortsはエンドカードNG → 横型動画で外部リンクを設定
+// 目的: Shorts視聴者を横型動画に誘導 → エンドカードでサービスへ流入
+export async function uploadLandscapeToYouTube(
+  token: string,
+  videoBuffer: Buffer,
+  title: string,
+  description: string,
+  tags: string[],
+  category = 'job'
+): Promise<{ videoId: string; url: string }> {
+  // 横型動画は即時公開（エンドカードはShorts非対応のためShortsタグは付けない）
+  const metadata = {
+    snippet: {
+      title: title.slice(0, 100),
+      description,
+      tags: [...tags, 'アソベンチャー', 'Asoventure', category],
+      categoryId: '27', // Education
+      defaultLanguage: 'ja',
+    },
+    status: {
+      privacyStatus: 'private', // エンドカード設定後に手動で公開
+      selfDeclaredMadeForKids: false,
+      publishAt: getNextOptimalPublishTime(),
+    },
+  };
+
+  const form = new FormData();
+  form.append('snippet', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('video', new Blob([new Uint8Array(videoBuffer)], { type: 'video/mp4' }), 'landscape.mp4');
+
+  const res = await fetch(
+    'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+  );
+  if (!res.ok) throw new Error(`Landscape upload failed: ${res.status} ${await res.text()}`);
+  const data = await res.json() as { id: string };
+  const videoId = data.id;
+
+  // エンドカード設定（動画末尾20秒前から表示）
+  // ⚠️ エンドカードAPIはvideo長が20秒以上必要
+  await setEndCards(token, videoId, category);
+
+  return { videoId, url: `https://www.youtube.com/watch?v=${videoId}` };
+}
+
+// エンドカード設定（カテゴリ別リンク先）
+async function setEndCards(token: string, videoId: string, category: string): Promise<void> {
+  // カテゴリ別の誘導先URL
+  const endCardUrls: Record<string, string> = {
+    cheese:    'https://cheese.asoventure.jp',
+    job:       'https://job.asoventure.jp',
+    health:    'https://health.asoventure.jp',
+    finance:   'https://finance.asoventure.jp',
+    life:      'https://life.asoventure.jp',
+    education: 'https://education.asoventure.jp',
+    music1963: 'https://music1963.com',
+  };
+  const targetUrl = endCardUrls[category] ?? 'https://linktr.ee/asoventure';
+
+  // YouTube endScreens.insert API
+  // ⚠️ 動画の実際の長さに依存（videoDuration - 20秒が開始位置）
+  // 動画が60秒なら40秒から、30秒なら10秒から表示
+  const endScreenBody = {
+    kind: 'youtube#endScreen',
+    videoId,
+    elements: [
+      // 1. チャンネル登録ボタン
+      {
+        type: 'subscribe',
+        left: 0.05,
+        top: 0.7,
+        width: 0.35,
+        startOffsetMs: 0,    // ←実際のoffsetはAPIが動画長から自動計算
+        durationMs: 20000,
+      },
+      // 2. 外部Webリンク（サービスへの誘導）
+      {
+        type: 'link',
+        left: 0.55,
+        top: 0.7,
+        width: 0.35,
+        startOffsetMs: 0,
+        durationMs: 20000,
+        linkUrl: targetUrl,
+      },
+    ],
+  };
+
+  const res = await fetch(
+    `https://www.googleapis.com/youtube/v3/endScreens?part=id,snippet&videoId=${videoId}`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(endScreenBody),
+    }
+  );
+
+  if (!res.ok) {
+    // エンドカードAPIエラーは致命的にしない（動画アップ自体は成功している）
+    const errText = await res.text();
+    console.warn(`[EndCard] 設定失敗 (video: ${videoId}):`, res.status, errText.slice(0, 200));
+    console.warn('[EndCard] → YouTube Studio から手動設定してください: https://studio.youtube.com');
+  } else {
+    console.log(`[EndCard] ✅ 設定完了 (video: ${videoId}) → ${targetUrl}`);
+  }
 }

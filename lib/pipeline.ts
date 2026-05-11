@@ -260,17 +260,13 @@ export async function phaseB(
     const srt = generateSRT(pending.narration, 15);
     await uploadCaptions(token, videoId, srt, 'ja').catch(e => console.warn('[Captions]', e));
 
-    // ② 投稿後コメント（いいね・登録・LINE誘導）
+    // ② 投稿後コメント（いいね・登録・linktr.ee誘導）
     try {
-    const commentOk = await postEngagementComment(token, videoId, category);
-    if (commentOk) {
+      await postEngagementComment(token, videoId, category);
       await notifyDiscord('[Shorts] Pinned comment posted: ' + category + ' | ' + videoId).catch(() => {});
-    } else {
-      console.warn('[Comment] postEngagementComment returned false for', videoId);
+    } catch (e) {
+      console.warn('[Comment] error:', e);
     }
-  } catch (e) {
-    console.warn('[Comment] error:', e);
-  }
 
     // ③ カテゴリ別再生リストに追加
     await addToPlaylist(token, videoId, category).catch(e => console.warn('[Playlist]', e));
