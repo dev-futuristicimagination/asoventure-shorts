@@ -77,12 +77,19 @@ export async function generateDynamicContent(
   const label = CATEGORY_LABEL[category] || category;
   const goal = CATEGORY_GOAL[category] || '目的: チャンネル登録獲得。30秒完結tipsとして動画内で完結させる。ナレーション末尾: 「いいね👍とチャンネル登録で毎日tips！コメントで感想を教えて！」';
   const titleRules = TITLE_FORMAT_RULES[category] || '';
+  // 【2026-05-11 修正】年号を動的取得（「2025年版」誤記を防ぐ）
+  const currentYear = new Date().getFullYear(); // 2026, 2027...
+  // 実測データ: 視聴者の46%が30〜40代男性（転職・副業検討層）
+  const targetAudience = category === 'cheese'
+    ? '22〜26歳・就活生・大学生・大学院生'
+    : '25〜44歳・転職検討中の社会人・副業に興味がある会社員';
 
   const prompt = `あなたはYouTube Shortsのコンテンツプロデューサーです。
 カテゴリ: ${label}
 トピック: ${topic}
 ベースナレーション: ${baseNarration}
-ターゲット: 20代・就活生・社会人1〜3年目
+ターゲット: ${targetAudience}
+現在年: ${currentYear}年（「〜年版」「〜年最新」のように年号を使う場合は必ず${currentYear}年と書くこと。2025年と書いてはいけない）
 
 【重要】${goal}
 
@@ -95,6 +102,7 @@ export async function generateDynamicContent(
 ${titleRules || '数字+具体的な行動・場面を組み合わせたタイトルを生成。'}
 - titleA: 数字+選型（「〜5選」「〜3つのコツ」など）
 - titleB: 体験談・インパクト型（「〜してみたら革命的だった」「〜を知らないまま損していた」など）
+- 年号が必要な場合は必ず「${currentYear}年」を使う（「2025年」は絶対禁止）
 - 両方に末尾「 #Shorts」を付ける
 
 以下をJSON形式で返してください:
