@@ -1,4 +1,4 @@
-// app/api/youtube-analytics/route.ts — YouTube Analytics 自動取得 + inferWeight フィードバック
+﻿// app/api/youtube-analytics/route.ts — YouTube Analytics 自動取得 + inferWeight フィードバック
 // 【2026-05-07 実データ分析から実装】
 // 【2026-05-10 v2 プロデューサー改訂】
 //   - 実データから inferWeight への自動フィードバック追加
@@ -172,6 +172,21 @@ function analyzePerformance(stats: VideoStats[], weights: CategoryWeight[]): str
   const bottomVideo = [...allVideos].sort((a, b) => a.views - b.views)[0];
   const avgViews = allVideos.reduce((s, v) => s + v.views, 0) / allVideos.length;
 
+
+  // --- A/B Title Pattern Analysis (2026-05-12 producer) ---
+  const WIN_PATTERNS = {
+    'NG暴露型':    /NG行動|やってはいけない|してはいけない/,
+    '比較逆説型':  /より.*理由|より.*有利|より.*大切/,
+    '数字選型':    /[1-9]選|[1-9]つのコツ|TOP[0-9]/,
+    '暴露型':      /本当の理由|実は|意外と|知らない/,
+    '懐かし型':    /ファミコン|たまごっち|昭和|ポケモン/,
+  };
+  const patternStats = Object.entries(WIN_PATTERNS).map(([name, regex]) => {
+    const matched = allVideos.filter(v => regex.test(v.title));
+    const avg = matched.length > 0 ? Math.round(matched.reduce((s,v) => s+v.views,0)/matched.length) : 0;
+    return { pattern: name, count: matched.length, avgViews: avg };
+  }).filter(p => p.count > 0).sort((a,b) => b.avgViews - a.avgViews);
+
   const lines = [
     `📊 **YouTube Shorts パフォーマンスレポート** ${today}`,
     '',
@@ -187,6 +202,9 @@ function analyzePerformance(stats: VideoStats[], weights: CategoryWeight[]): str
     ...weights.map(w => `  ${w.category}: 平均${w.avgViews}回(${w.videoCount}本) → 重み${w.recommendedWeight}`),
     '',
     '→ analytics-weights.json に自動書き出し済み（次回生成から反映）',
+    '',
+    '**🧪 A/Bタイトルパターン分析:**',
+    ...(patternStats.length > 0 ? patternStats.map(p => `  ${p.pattern}: ${p.count}本/平均${p.avgViews}回`) : ['  データ不足']),
   ];
 
   if (todayVideos.length) {
