@@ -1,4 +1,4 @@
-// app/api/job-canvas/route.ts — 就職・転職 How to Canvas動画
+﻿// app/api/job-canvas/route.ts — 就職・転職 How to Canvas動画
 // 【方針】就活専用ではなく「社会人キャリア全般」で最大公約数を狙う
 import { NextResponse } from 'next/server';
 import { phaseCanvas } from '@/lib/pipeline';
@@ -227,7 +227,7 @@ export async function GET(req: Request) {
   const phase = new URL(req.url).searchParams.get('phase');
   if (phase !== 'canvas') return NextResponse.json({ error: 'phase=canvas required' }, { status: 400 });
   try {
-    const result = await phaseCanvas('job', CANVAS_POOLS[Math.floor(Math.random() * CANVAS_POOLS.length)], CTA);
+    const result = await phaseCanvas('job', CANVAS_POOLS[Math.floor(Math.random() * CANVAS_POOLS.length)], CTA, true) // TTS test;
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });

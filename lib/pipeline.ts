@@ -329,7 +329,8 @@ async function mixVideoWithBGM(videoBuffer: Buffer): Promise<Buffer> {
 export async function phaseCanvas(
   category: string,
   item: CanvasItem,
-  cta: CtaConfig
+  cta: CtaConfig,
+  enableTTS = false
 ): Promise<{ ok: boolean; message: string; youtubeUrl?: string }> {
   try {
     // Canvas動画生成（FFmpegのみ・Veo3不要）
@@ -348,6 +349,7 @@ export async function phaseCanvas(
       fullUrl: item.fullUrl,
       ctaText: item.ctaText,
       lang: item.lang ?? 'ja', bgImageUrl: item.bgImageUrl,
+      enableTTS,
     });
 
     // YouTube投稿

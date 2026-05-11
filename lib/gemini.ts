@@ -228,3 +228,48 @@ export async function notifyDiscord(msg: string): Promise<void> {
     body: JSON.stringify({ content: `🎬 **Shorts Bot**\n${msg}`.slice(0, 2000) }),
   }).catch(() => {});
 }
+
+// --- Gemini TTS (2026-05-12 producer) ---
+const TTS_VOICE_MAP: Record<string, { voice: string; stylePrompt: string }> = {
+  cheese:    { voice: 'Aoede',  stylePrompt: 'q' },
+  job:       { voice: 'Fenrir', stylePrompt: 'q' },
+  health:    { voice: 'Kore',   stylePrompt: 'q' },
+  finance:   { voice: 'Charon', stylePrompt: 'q' },
+  education: { voice: 'Leda',   stylePrompt: 'q' },
+  life:      { voice: 'Aoede',  stylePrompt: 'q' },
+  music1963: { voice: 'Kore',   stylePrompt: 'q' },
+  retro:     { voice: 'Fenrir', stylePrompt: 'q' },
+  japan:     { voice: 'Leda',   stylePrompt: 'q' },
+  default:   { voice: 'Kore',   stylePrompt: 'q' },
+};
+
+export interface TTSResult { audioBuffer: Buffer; durationEstimate: number; }
+
+export async function generateTTS(narration: string, category: string): Promise<TTSResult | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) { console.warn('[TTS] no key'); return null; }
+  const { voice } = TTS_VOICE_MAP[category] ?? TTS_VOICE_MAP.default;
+  const cleanText = narration.replace(/[^\u3040-\u30FF\u4E00-\u9FAF\u0020-\u007E]/g, '').trim();
+  try {
+    const res = await fetch(`${GEMINI_API}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: cleanText }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) { console.warn('[TTS] err', res.status); return null; }
+    const json = await res.json() as { candidates?: Array<{ content: { parts: Array<{ inlineData?: { data: string } }> } }> };
+    const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!b64) { console.warn('[TTS] no audio data'); return null; }
+    const audioBuffer = Buffer.from(b64, 'base64');
+    const durationEstimate = Math.min(cleanText.length / 5, 14);
+    console.log(`[TTS] ok voice=${voice} size=${audioBuffer.length} est=${durationEstimate.toFixed(1)}s`);
+    return { audioBuffer, durationEstimate };
+  } catch (e) { console.warn('[TTS] failed, BGM only:', e); return null; }
+}

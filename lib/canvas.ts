@@ -1,4 +1,4 @@
-// lib/canvas.ts — Canvas動画生成 v12「SE付き5スライドカット切り替え版」
+﻿// lib/canvas.ts — Canvas動画生成 v12「SE付き5スライドカット切り替え版」
 // 【プロデューサー改訂 2026-05-11 v12】
 //   v11からの変更点:
 //   - カット切り替え時にSE（ポン音）を追加 → ループ感・メリハリ向上
@@ -13,6 +13,7 @@ import { constants } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { generateFrame } from './frame-generator';
+import { generateTTS } from './gemini';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ffmpegPath: string = require('ffmpeg-static') as string;
@@ -54,6 +55,7 @@ export interface CanvasOptions {
   ctaText: string;
   lang?: 'ja' | 'en';
   bgImageUrl?: string;  // 動的OGP（なければbg-libraryから選択）
+  enableTTS?: boolean;  // Gemini TTS有効化フラグ（デフォルト: false）
 }
 
 // ── 背景ライブラリ: カテゴリ別事前生成画像をランダム選択 ──────────────────
@@ -155,13 +157,27 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     }
     console.log(`[Canvas v12] ${slides.length}枚のフレーム生成完了`);
 
-    // ── STEP 2: BGM 取得 ────────────────────────────────────────────────────
+    // ── STEP 2: BGM + TTS 取得 ──────────────────────────────────────────────
     const bgmFile     = join(process.cwd(), 'public', 'audio', 'bgm', `${opts.category}.mp3`);
     const bgmFallback = join(process.cwd(), 'public', 'audio', 'bgm', 'lofi.mp3');
     const bgmPath     = join(tmpDir, 'bgm.mp3');
     let bgmSrc = bgmFile;
     try { await access(bgmFile, constants.R_OK); } catch { bgmSrc = bgmFallback; }
     await copyFile(bgmSrc, bgmPath);
+
+    // Gemini TTS: enableTTS フラグが true の場合のみ呼び出し
+    // TTS失敗時は null が返り BGMのみにフォールバック（安全設計）
+    let ttsPath: string | null = null;
+    if (opts.enableTTS) {
+      const ttsResult = await generateTTS(opts.narration, opts.category);
+      if (ttsResult) {
+        ttsPath = join(tmpDir, 'tts.wav');
+        await writeFile(ttsPath, ttsResult.audioBuffer);
+        console.log(`[Canvas v12] TTS音声保存完了: ${ttsResult.audioBuffer.length}bytes`);
+      } else {
+        console.log('[Canvas v12] TTS失敗 → BGMのみで続行');
+      }
+    }
 
     // ── STEP 3: FFmpeg 5スライド xfade + SE 動画生成 ────────────────────────
     const outPath  = join(tmpDir, 'canvas.mp4');
@@ -218,44 +234,60 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     const totalDur = VIDEO_DURATION;
     filterParts.push(`[xout]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
 
-    // ── 音声フィルター: BGM + SE ──────────────────────────────────────────
-    // BGM: -18dBに下げてSEを際立たせる
-    filterParts.push(`[${nSlides}:a]volume=-18dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[bgm]`);
-
-    // SE: 各カット切り替え時に「ポン」音（sine 880Hz, 0.12秒、-12dB）
-    // FFmpeg lavfi で生成、delay で正確なタイミングに配置
-    const seInputIdx = nSlides + 1; // lavfiソースのインデックス
-    // 各SEをdelay + volumeで個別生成
-    const seLabels: string[] = [];
-    SE_TIMES.forEach((t, idx) => {
-      const label = `se${idx}`;
-      const delayMs = Math.round(t * 1000);
-      // sine 880Hz (高め・清音) 120ms, -10dB
+    // ── 音声フィルター: BGM + SE + TTS ────────────────────────────────────
+    // TTS有効時: TTS音声を前面に出し BGM は環境音として後退
+    if (ttsPath) {
+      // TTS入力インデックスはSE(lavfi)の次
+      const ttsIdx = nSlides + 2;
       filterParts.push(
-        `[${seInputIdx}]atrim=start=0:end=0.12,volume=-10dB,adelay=${delayMs}|${delayMs}[${label}]`
+        // BGM: -22dBに下げTTSを際立たせる
+        `[${nSlides}:a]volume=-22dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[bgm]`,
+        // TTS: 先頭から再生・音量-8dB（自然なナレーション音量）
+        `[${ttsIdx}:a]volume=-8dB,afade=t=in:st=0:d=0.5,afade=t=out:st=${totalDur - 1.5}:d=1.5[tts]`
       );
-      seLabels.push(`[${label}]`);
-    });
+      // SE生成
+      SE_TIMES.forEach((t, idx) => {
+        const label = `se${idx}`;
+        const delayMs = Math.round(t * 1000);
+        filterParts.push(
+          `[${seInputIdx}]atrim=start=0:end=0.12,volume=-12dB,adelay=${delayMs}|${delayMs}[${label}]`
+        );
+        seLabels.push(`[${label}]`);
+      });
+      // BGM + TTS + SE をミックス
+      const mixInputsTTS = `[bgm][tts]${seLabels.join('')}`;
+      filterParts.push(`${mixInputsTTS}amix=inputs=${1 + 1 + seLabels.length}:duration=first:normalize=0[aud]`);
+    } else {
+      // BGM + SE のみ（TTS無効 or 失敗時）
+      filterParts.push(`[${nSlides}:a]volume=-18dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[bgm]`);
+      SE_TIMES.forEach((t, idx) => {
+        const label = `se${idx}`;
+        const delayMs = Math.round(t * 1000);
+        filterParts.push(
+          `[${seInputIdx}]atrim=start=0:end=0.12,volume=-10dB,adelay=${delayMs}|${delayMs}[${label}]`
+        );
+        seLabels.push(`[${label}]`);
+      });
+      const mixInputs = `[bgm]${seLabels.join('')}`;
+      filterParts.push(`${mixInputs}amix=inputs=${1 + seLabels.length}:duration=first:normalize=0[aud]`);
+    }
 
-    // BGM + 全SE をミックス
-    const mixInputs = `[bgm]${seLabels.join('')}`;
-    const mixCount  = 1 + seLabels.length;
-    filterParts.push(
-      `${mixInputs}amix=inputs=${mixCount}:duration=first:normalize=0[aud]`
-    );
-
-    // FFmpeg 入力: 5枚フレーム + BGM + SE(lavfi sine)
+    // FFmpeg 入力: 5枚フレーム + BGM + SE(lavfi sine) [+ TTS]
     const ffmpegArgs: string[] = ['-y'];
     for (const fp of framePaths) {
       ffmpegArgs.push('-loop', '1', '-framerate', '30', '-i', fp);
     }
     // BGM（stream_loop）
     ffmpegArgs.push('-stream_loop', '-1', '-i', bgmPath);
-    // SE用 lavfi sine ソース（短い音なので1回のみ・4回分 delay で使い回す）
+    // SE用 lavfi sine ソース
     ffmpegArgs.push(
       '-f', 'lavfi',
       '-i', `sine=frequency=880:sample_rate=44100:duration=${totalDur}`
     );
+    // TTS音声（生成できた場合のみ追加）
+    if (ttsPath) {
+      ffmpegArgs.push('-i', ttsPath);
+    }
 
     ffmpegArgs.push(
       '-filter_complex', filterParts.join(';'),
