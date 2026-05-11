@@ -1,4 +1,4 @@
-// lib/gemini.ts — 動的コンテンツ生成（Gemini 2.5 Flash）
+﻿// lib/gemini.ts — 動的コンテンツ生成（Gemini 2.5 Flash）
 // 【2026-05-10 プロデューサー改訂v2】
 //  - health/finance からのCheese誘導を強化
 //  - A/Bテスト用タイトル2案を同時生成
@@ -245,31 +245,71 @@ const TTS_VOICE_MAP: Record<string, { voice: string; stylePrompt: string }> = {
 
 export interface TTSResult { audioBuffer: Buffer; durationEstimate: number; }
 
+// GeminiTTS が返す raw PCM (Linear16, 24kHz, mono) に WAV ヘッダーを付与する
+function pcmToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16): Buffer {
+  const dataSize = pcm.length;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);                                    // PCM
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * channels * bitsPerSample / 8, 28); // byte rate
+  header.writeUInt16LE(channels * bitsPerSample / 8, 32);         // block align
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
+}
+
 export async function generateTTS(narration: string, category: string): Promise<TTSResult | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) { console.warn('[TTS] no key'); return null; }
   const { voice } = TTS_VOICE_MAP[category] ?? TTS_VOICE_MAP.default;
-  const cleanText = narration.replace(/[^\u3040-\u30FF\u4E00-\u9FAF\u0020-\u007E]/g, '').trim();
+  // 絵文字・制御文字を除去してTTSに渡す（日本語・英数字・記号のみ）
+  const cleanText = narration
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[^\u3040-\u30FF\u4E00-\u9FAF\u0020-\u007E\uFF00-\uFFEF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleanText) { console.warn('[TTS] empty text after cleanup'); return null; }
   try {
-    const res = await fetch(`${GEMINI_API}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: cleanText }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-        },
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) { console.warn('[TTS] err', res.status); return null; }
-    const json = await res.json() as { candidates?: Array<{ content: { parts: Array<{ inlineData?: { data: string } }> } }> };
-    const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!b64) { console.warn('[TTS] no audio data'); return null; }
-    const audioBuffer = Buffer.from(b64, 'base64');
-    const durationEstimate = Math.min(cleanText.length / 5, 14);
-    console.log(`[TTS] ok voice=${voice} size=${audioBuffer.length} est=${durationEstimate.toFixed(1)}s`);
-    return { audioBuffer, durationEstimate };
-  } catch (e) { console.warn('[TTS] failed, BGM only:', e); return null; }
+    const res = await fetch(
+      `${GEMINI_API}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: cleanText }] }],
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+          },
+        }),
+        signal: AbortSignal.timeout(20000),
+      }
+    );
+    if (!res.ok) {
+      console.warn('[TTS] API error', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+    const json = await res.json() as {
+      candidates?: Array<{ content: { parts: Array<{ inlineData?: { data: string; mimeType?: string } }> } }>;
+    };
+    const inlineData = json.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+    if (!inlineData?.data) { console.warn('[TTS] no audio data in response'); return null; }
+
+    const rawPcm = Buffer.from(inlineData.data, 'base64');
+    // Gemini TTS は raw PCM (L16, 24kHz, mono) を返すためWAVヘッダーを付与
+    const wavBuffer = pcmToWav(rawPcm, 24000, 1, 16);
+    const durationEstimate = Math.min(rawPcm.length / (24000 * 2), 14); // L16=2bytes/sample
+    console.log(`[TTS] ok voice=${voice} pcm=${rawPcm.length}B wav=${wavBuffer.length}B dur=${durationEstimate.toFixed(1)}s`);
+    return { audioBuffer: wavBuffer, durationEstimate };
+  } catch (e) {
+    console.warn('[TTS] failed → BGM only:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
 }
