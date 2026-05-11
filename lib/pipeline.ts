@@ -1,4 +1,4 @@
-// lib/pipeline.ts — Phase A / Phase B 共通パイプライン + Canvas（テキスト動画）
+﻿// lib/pipeline.ts — Phase A / Phase B 共通パイプライン + Canvas（テキスト動画）
 // ffmpeg-static を使用してVercel serverless環境でFFmpegを実行
 
 import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
