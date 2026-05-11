@@ -4,220 +4,236 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 
 const THEME: Record<string, { bg: string; accent: string; label: string }> = {
-    health:    { bg: '#0D2B1F', accent: '#74C69D', label: 'HEALTH' },
-    finance:   { bg: '#080818', accent: '#F5A623', label: 'FINANCE' },
-    education: { bg: '#1A0F3D', accent: '#7EC8E3', label: 'EDUCATION' },
-    life:      { bg: '#0A2E38', accent: '#FFD166', label: 'LIFE' },
-    japan:     { bg: '#5C0A00', accent: '#FFFFFF', label: 'JAPAN' },
-    job:       { bg: '#080F18', accent: '#F5A623', label: 'JOB' },
-    cheese:    { bg: '#100600', accent: '#FFD700', label: 'Cheese' },
-    music1963: { bg: '#0D0020', accent: '#F8BBD0', label: 'MUSIC1963' },
+  health:    { bg: '#0D2B1F', accent: '#74C69D', label: 'HEALTH' },
+  finance:   { bg: '#080818', accent: '#F5A623', label: 'FINANCE' },
+  education: { bg: '#1A0F3D', accent: '#7EC8E3', label: 'EDUCATION' },
+  life:      { bg: '#0A2E38', accent: '#FFD166', label: 'LIFE' },
+  japan:     { bg: '#5C0A00', accent: '#FFFFFF', label: 'JAPAN' },
+  job:       { bg: '#080F18', accent: '#F5A623', label: 'JOB' },
+  cheese:    { bg: '#100600', accent: '#FFD700', label: 'Cheese' },
+  music1963: { bg: '#0D0020', accent: '#F8BBD0', label: 'MUSIC1963' },
 };
 
+// ── フォントキャッシュ ────────────────────────────────────────────────
 let _fontNoto: Buffer | null = null;
-let _fontEmoji: Buffer | null = null;
 
-async function loadFonts() {
+async function loadFont(): Promise<Buffer> {
   if (!_fontNoto) {
-    _fontNoto = await readFile(join(process.cwd(), 'public', 'fonts', 'NotoSansJP-satori.ttf'));
-  }
-  if (!_fontEmoji) {
-    const emojiPath = join(process.cwd(), 'public', 'fonts', 'NotoEmoji-Regular.ttf');
-    if (existsSync(emojiPath)) {
-      _fontEmoji = await readFile(emojiPath);
+    const localPath = join(process.cwd(), 'public', 'fonts', 'NotoSansJP-satori.ttf');
+    if (existsSync(localPath)) {
+      _fontNoto = await readFile(localPath);
     } else {
-      // Vercel環境ではGoogle Fontsから起動時にダウンロード
-      try {
-        const res = await fetch(
-          'https://fonts.gstatic.com/s/notoemoji/v49/bMrnmSyK7YY-MEu6aWjPDs-ar6uWaGWuob-r0jiCs2ZVXV0.ttf',
-          { signal: AbortSignal.timeout(5000) }
-        );
-        if (res.ok) _fontEmoji = Buffer.from(await res.arrayBuffer());
-      } catch { console.warn('[frame-generator] NotoEmojiダウンロード失敗。絵文字は「□」になります。'); }
+      // Vercel: ローカルにない場合はフォールバックURL
+      const res = await fetch(
+        'https://fonts.gstatic.com/s/notosansjp/v53/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.ttf',
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+      _fontNoto = Buffer.from(await res.arrayBuffer());
     }
   }
-  return { noto: _fontNoto!, emoji: _fontEmoji };
+  return _fontNoto;
 }
 
-async function loadBgImageAsDataUri(category: string, bgImageUrl?: string): Promise<string | null> {
-    if (bgImageUrl) {
-          try {
-                  const res = await fetch(bgImageUrl, { signal: AbortSignal.timeout(8000) });
-                  if (res.ok) {
-                            const ab = await res.arrayBuffer();
-                            const buf = Buffer.from(ab);
-                            const contentType = res.headers.get('content-type') || 'image/jpeg';
-                            const mime = contentType.split(';')[0].trim();
-                            return `data:${mime};base64,${buf.toString('base64')}`;
-                  }
-          } catch (err) {
-                  console.warn('[FrameGen] OGP fetch failed:', err);
-          }
-    }
-    return null;
-}
-
-// 絵文字をテキスト代替に変換（NotoEmoji未取得時のフォールバック）
-// フォント内包時は emoji=true でスキップ
-function stripEmoji(text: string, hasEmojiFont: boolean): string {
-  if (hasEmojiFont) return text;
-  // 主要絵文字を意味のある記号に置換
-  return text
-    .replace(/👎/g, '(y)')
-    .replace(/👍/g, '(y)')
-    .replace(/🔔/g, '(bell)')
-    .replace(/💬/g, '>>')
-    .replace(/👆/g, '^')
-    .replace(/📄/g, '[doc]')
-    .replace(/✨/g, '*')
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // その他の絵文字を削除
+// ── 絵文字除去（satori はカラー絵文字TTF未対応のため確実に除去） ───────
+// 注: NotoSansJP は絵文字グリフを持たないため、絵文字はすべてテキスト代替に変換する
+// これにより □ や satori クラッシュを防ぐ
+function e(str: string): string {
+  return str
+    .replace(/👍/g,  'いいね')
+    .replace(/👎/g,  'NG')
+    .replace(/🔔/g,  'ベル')
+    .replace(/💬/g,  'コメント')
+    .replace(/👆/g,  '▲')
+    .replace(/📖/g,  '')   // 「記事」不要・→ だけで十分
+    .replace(/📋/g,  '')   // タイトルの絵文字は除去
+    .replace(/📈/g,  'UP')
+    .replace(/📉/g,  'DOWN')
+    .replace(/💰/g,  '')
+    .replace(/💼/g,  '')
+    .replace(/🤝/g,  '')
+    .replace(/🔑/g,  '')
+    .replace(/✅/g,  '◆')
+    .replace(/❌/g,  '×')
+    .replace(/⏱️/g, '')
+    .replace(/😤/g,  '')
+    .replace(/✦/g,   '◆')
+    // 残った絵文字をすべて除去
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u2600-\u27FF]/gu, '')
+    .replace(/[\uFE00-\uFE0F]/g, '')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
+// ── 背景画像 Data URI 変換 ──────────────────────────────────────────────
+async function loadBgImageAsDataUri(bgImageUrl?: string): Promise<string | null> {
+  if (!bgImageUrl) return null;
+  try {
+    const res = await fetch(bgImageUrl, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const mime = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+    return `data:${mime};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
 export interface FrameOptions {
-    category: string;
-    title: string;
-    points: string[];
-    siteUrl: string;
-    ctaText: string;
-    bgImageUrl?: string;
-    slideNum?: number;
-    totalSlides?: number;
+  category: string;
+  title: string;
+  points: string[];
+  siteUrl: string;
+  ctaText: string;
+  bgImageUrl?: string;
+  slideNum?: number;
+  totalSlides?: number;
 }
 
 type SatoriChild = SatoriElement | string | null;
 interface SatoriElement {
-    type: string;
-    props: {
-      style?: Record<string, unknown>;
-      children?: SatoriChild | SatoriChild[];
-      src?: string;
-      key?: string;
-    };
+  type: string;
+  props: {
+    style?: Record<string, unknown>;
+    children?: SatoriChild | SatoriChild[];
+    src?: string;
+  };
 }
 
 function div(style: Record<string, unknown>, children: SatoriChild | SatoriChild[]): SatoriElement {
-    return { type: 'div', props: { style: { display: 'flex', ...style }, children } };
+  return { type: 'div', props: { style: { display: 'flex', ...style }, children } };
+}
+function txt(content: string, style: Record<string, unknown>): SatoriElement {
+  return { type: 'div', props: { style: { display: 'flex', ...style }, children: e(content) } };
 }
 
-function text(content: string, style: Record<string, unknown>): SatoriElement {
-    return { type: 'div', props: { style: { display: 'flex', ...style }, children: content } };
-}
-
+// ── フレーム生成 ──────────────────────────────────────────────────────────
 export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
-    const theme = THEME[opts.category] || THEME.health;
-    const { noto, emoji } = await loadFonts();
-    const bgDataUri = await loadBgImageAsDataUri(opts.category, opts.bgImageUrl);
-    const slideNum = opts.slideNum || 1;
-    const totalSlides = opts.totalSlides || 1;
-    const isCta = slideNum === totalSlides;
-    const isHook = slideNum === 1 && totalSlides > 1;
+  const theme      = THEME[opts.category] || THEME.job;
+  const fontData   = await loadFont();
+  const bgDataUri  = await loadBgImageAsDataUri(opts.bgImageUrl);
+  const slideNum   = opts.slideNum   ?? 1;
+  const totalSlides = opts.totalSlides ?? 1;
+  const isCta  = slideNum === totalSlides;
+  const isHook = slideNum === 1 && totalSlides > 1;
 
-    const dots = Array.from({ length: totalSlides }, (_, i): SatoriElement =>
-      div({
-        width: '24px', height: '24px', borderRadius: '50%',
-        backgroundColor: i < slideNum ? theme.accent : `${theme.accent}40`,
-        marginRight: '12px',
-      }, '')
-    );
+  // 進捗ドット
+  const dots = Array.from({ length: totalSlides }, (_, i): SatoriElement =>
+    div({ width: '24px', height: '24px', borderRadius: '50%',
+          backgroundColor: i < slideNum ? theme.accent : `${theme.accent}40`,
+          marginRight: '12px' }, '')
+  );
 
-    const pointCards = opts.points.slice(0, 5).map((point, i): SatoriElement => {
-        const cleanText = point.replace(/^[1-5]\s*/, '').split('\n')[0];
-        return div(
-          {
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: '24px',
-                    backgroundColor: `${theme.accent}20`,
-                    borderRadius: '16px',
-                    padding: '24px 28px',
-                    border: `3px solid ${theme.accent}60`,
-                    marginBottom: '24px',
-          },
-                [
-                          div({ backgroundColor: theme.accent, color: theme.bg, width: '64px', height: '64px', borderRadius: '50%', alignItems: 'center', justifyContent: 'center', fontSize: '36px', fontWeight: 'bold', flexShrink: 0 }, String(i + 1)),
-                          text(cleanText, { color: '#FFFFFF', fontSize: '52px', lineHeight: '1.4', flex: 1, flexWrap: 'wrap' }),
-                        ]
-              );
-    });
+  // Tipスライドのポイントカード（hookスライドでは非表示）
+  const pointCards = opts.points.slice(0, 3).map((point, i): SatoriElement => {
+    const clean = e(point.replace(/^[①②③④⑤1-5]\s*/, '').split('\n')[0]);
+    return div({
+      flexDirection: 'row', alignItems: 'center', gap: '24px',
+      backgroundColor: `${theme.accent}20`, borderRadius: '16px',
+      padding: '24px 28px', border: `3px solid ${theme.accent}60`,
+      marginBottom: '24px',
+    }, [
+      div({ backgroundColor: theme.accent, color: theme.bg,
+            width: '64px', height: '64px', borderRadius: '50%',
+            alignItems: 'center', justifyContent: 'center',
+            fontSize: '36px', fontWeight: 'bold', flexShrink: 0 }, String(i + 1)),
+      txt(clean, { color: '#FFFFFF', fontSize: '52px', lineHeight: '1.4', flex: 1, flexWrap: 'wrap' }),
+    ]);
+  });
 
-    // スライド別タイトルフォントサイズ（2倍化: モバイル最適化）
-    const titleFontSize = isCta ? '80px' : isHook ? '96px' : '88px';
+  // フォントサイズ: hook=96px, tip=88px, cta=80px
+  const titleFontSize = isCta ? '80px' : isHook ? '96px' : '88px';
 
-    // hookスライドはタイトルのみ表示（ポイントカード非表示・インパクト最大化）
-    const showPointCards = !isHook;
+  const root: SatoriElement = div(
+    { width: '1080px', height: '1920px', flexDirection: 'column',
+      position: 'relative', overflow: 'hidden', fontFamily: 'NotoSansJP',
+      backgroundColor: theme.bg },
+    [
+      // 背景OGP画像（opacity 0.55）
+      ...(bgDataUri ? [{ type: 'img', props: { src: bgDataUri, style: {
+        position: 'absolute', top: 0, left: 0,
+        width: '1080px', height: '1920px', objectFit: 'cover', opacity: 0.55,
+      } } } as SatoriElement] : []),
+      // グラデーションオーバーレイ（テキスト可読性確保）
+      div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px',
+            background: `linear-gradient(180deg, ${theme.bg}EE 0%, ${theme.bg}99 50%, ${theme.bg}EE 100%)` }, ''),
+      // アクセントライン（上・下・左・右）
+      div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
+      div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
+      div({ position: 'absolute', top: 0, left: 0, width: '10px', height: '1920px', backgroundColor: theme.accent }, ''),
+      div({ position: 'absolute', top: 0, right: 0, width: '10px', height: '1920px', backgroundColor: `${theme.accent}60` }, ''),
 
-    const rootElement: SatoriElement = div(
-    { width: '1080px', height: '1920px', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: 'NotoSansJP', backgroundColor: theme.bg },
-        [
-                ...(bgDataUri ? [{ type: 'img', props: { src: bgDataUri, style: { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', objectFit: 'cover', opacity: 0.55 } } } as SatoriElement] : []),
-                // グラデーションオーバーレイ（背景に深み）
-                div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', background: `linear-gradient(180deg, ${theme.bg}EE 0%, ${theme.bg}99 50%, ${theme.bg}EE 100%)` }, ''),
-                // アクセントライン（太め）
-                div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
-                div({ position: 'absolute', top: 0, left: 0, width: '10px', height: '1920px', backgroundColor: theme.accent }, ''),
-                div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
-                div({ position: 'absolute', top: 0, right: 0, width: '10px', height: '1920px', backgroundColor: `${theme.accent}60` }, ''),  // 右側も薄く
-                div(
-                  { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', flexDirection: 'column', padding: '60px 60px 60px 80px' },
-                          [
-                            // ヘッダー行: ラベル + スライド番号ドット
-                            div({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }, [
-                              text(theme.label, { fontSize: '44px', color: theme.accent, fontWeight: 'bold', letterSpacing: '2px' }),
-                              div({ flexDirection: 'row', alignItems: 'center' }, dots),
-                            ]),
-                            div({ width: '100%', height: '4px', backgroundColor: `${theme.accent}80`, marginBottom: '36px' }, ''),
-                            // タイトル（スライド種別で色変化）
-                            div({
-                              flexDirection: 'column',
-                              borderLeft: `10px solid ${theme.accent}`,
-                              paddingLeft: '28px',
-                              marginBottom: isCta ? '48px' : '56px',
-                              backgroundColor: isHook ? `${theme.accent}18` : `${theme.accent}08`,
-                              padding: isHook ? '28px 24px 28px 28px' : '16px 16px 16px 28px',
-                              borderRadius: isHook ? '0 16px 16px 0' : '0 8px 8px 0',
-                            }, text(opts.title, { fontSize: titleFontSize, fontWeight: 'bold', color: isHook ? theme.accent : '#FFFFFF', lineHeight: '1.3', flexWrap: 'wrap' })),
-                            // ポイントカード or CTA専用コンテンツ
-                            ...(isCta
-                              ? [
-                                  // CTA: スワイプ誘導テキスト（最上部）
-                                  div({ flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }, [
-                                    text('👆 今すぐ上にスワイプ！', { color: theme.accent, fontSize: '52px', fontWeight: 'bold' }),
-                                  ]),
-                                  div({ flexDirection: 'column', gap: '28px', flex: 1 }, opts.points.map((p): SatoriElement =>
-                                    div({ flexDirection: 'row', alignItems: 'center', gap: '24px',
-                                          backgroundColor: `${theme.accent}25`, borderRadius: '20px', padding: '28px 36px',
-                                          border: `3px solid ${theme.accent}` },
-                                      text(p, { color: '#FFFFFF', fontSize: '56px', fontWeight: 'bold' })
-                                    )
-                                  )),
-                                  div({ flexDirection: 'column', backgroundColor: `${theme.accent}30`, border: `4px solid ${theme.accent}`, borderRadius: '20px', padding: '32px 40px', marginTop: '36px' }, [
-                                    text(opts.ctaText, { color: theme.accent, fontSize: '48px', fontWeight: 'bold', marginBottom: '12px' }),
-                                    text(opts.siteUrl, { color: '#CCCCCC', fontSize: '38px' }),
-                                  ]),
-                                ]
-                              : showPointCards
-                                ? [
-                                    div({ flexDirection: 'column', flex: 1 }, pointCards),
-                                    div({ flexDirection: 'column', backgroundColor: `${theme.accent}12`, border: `2px solid ${theme.accent}60`, borderRadius: '16px', padding: '24px 32px', marginTop: '24px' }, [
-                                      text(opts.siteUrl, { color: '#BBBBBB', fontSize: '36px' }),
-                                    ]),
-                                  ]
-                                : [] // hookスライド: ポイントカードなし・タイトルのみ
-                            ),
-                          ]
-                ),
-              ]
-      );
+      // コンテンツレイヤー
+      div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px',
+            flexDirection: 'column', padding: '60px 60px 60px 80px' }, [
 
-    const satorifonts: Parameters<typeof satori>[1]['fonts'] = [
-      { name: 'NotoSansJP', data: noto, weight: 400, style: 'normal' },
-      { name: 'NotoSansJP', data: noto, weight: 700, style: 'normal' },
-      ...(emoji ? [{ name: 'NotoEmoji', data: emoji, weight: 400, style: 'normal' as const }] : []),
-    ];
+        // ヘッダー: ラベル + 進捗ドット
+        div({ flexDirection: 'row', alignItems: 'center',
+              justifyContent: 'space-between', marginBottom: '20px' }, [
+          txt(theme.label, { fontSize: '44px', color: theme.accent, fontWeight: 'bold', letterSpacing: '2px' }),
+          div({ flexDirection: 'row', alignItems: 'center' }, dots),
+        ]),
+        div({ width: '100%', height: '4px', backgroundColor: `${theme.accent}80`, marginBottom: '36px' }, ''),
 
-    const svg = await satori(rootElement as any, { width: 1080, height: 1920, fonts: satorifonts });
-    const sharpMod = require('sharp');
-    const pngBuf = await sharpMod(Buffer.from(svg)).png().toBuffer();
-    return pngBuf;
+        // タイトルブロック
+        div({
+          flexDirection: 'column',
+          borderLeft: `10px solid ${theme.accent}`,
+          marginBottom: isCta ? '48px' : '56px',
+          backgroundColor: isHook ? `${theme.accent}18` : `${theme.accent}08`,
+          padding: isHook ? '28px 24px 28px 28px' : '16px 16px 16px 28px',
+          borderRadius: isHook ? '0 16px 16px 0' : '0 8px 8px 0',
+        }, txt(opts.title, {
+          fontSize: titleFontSize, fontWeight: 'bold',
+          color: isHook ? theme.accent : '#FFFFFF',
+          lineHeight: '1.3', flexWrap: 'wrap',
+        })),
+
+        // CTAスライド
+        ...(isCta ? [
+          div({ flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }, [
+            txt('▲ 今すぐ上にスワイプ！', { color: theme.accent, fontSize: '52px', fontWeight: 'bold' }),
+          ]),
+          div({ flexDirection: 'column', gap: '28px', flex: 1 },
+            opts.points.map((p): SatoriElement =>
+              div({ flexDirection: 'row', alignItems: 'center', gap: '24px',
+                    backgroundColor: `${theme.accent}25`, borderRadius: '20px',
+                    padding: '28px 36px', border: `3px solid ${theme.accent}` },
+                txt(p, { color: '#FFFFFF', fontSize: '56px', fontWeight: 'bold' })
+              )
+            )
+          ),
+          div({ flexDirection: 'column', backgroundColor: `${theme.accent}30`,
+                border: `4px solid ${theme.accent}`, borderRadius: '20px',
+                padding: '32px 40px', marginTop: '36px' }, [
+            txt(opts.ctaText, { color: theme.accent, fontSize: '48px', fontWeight: 'bold', marginBottom: '12px' }),
+            txt(opts.siteUrl, { color: '#CCCCCC', fontSize: '38px' }),
+          ]),
+        ] : []),
+
+        // Tipスライド（hook以外）
+        ...(!isCta && !isHook ? [
+          div({ flexDirection: 'column', flex: 1 }, pointCards),
+          div({ flexDirection: 'column', backgroundColor: `${theme.accent}12`,
+                border: `2px solid ${theme.accent}60`, borderRadius: '16px',
+                padding: '24px 32px', marginTop: '24px' }, [
+            txt(opts.siteUrl, { color: '#BBBBBB', fontSize: '36px' }),
+          ]),
+        ] : []),
+
+        // hookスライドはタイトルのみ（ポイントカードなし）
+      ]),
+    ]
+  );
+
+  const satorifonts: Parameters<typeof satori>[1]['fonts'] = [
+    { name: 'NotoSansJP', data: fontData, weight: 400, style: 'normal' },
+    { name: 'NotoSansJP', data: fontData, weight: 700, style: 'normal' },
+  ];
+
+  const svg = await satori(root as any, { width: 1080, height: 1920, fonts: satorifonts });
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const sharp = require('sharp');
+  return await sharp(Buffer.from(svg)).png().toBuffer();
 }

@@ -95,7 +95,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       {
         label: 'cta',
         title: opts.ctaText || 'チャンネル登録で毎日tips！',
-        points: ['👍 いいね & 🔔 チャンネル登録', '💬 コメントで教えてね！'],
+        points: ['いいね & チャンネル登録お願いします', 'コメントで感想を教えてね！'],
         isCta: true,
         slideNum: 5,
         totalSlides: 5,
