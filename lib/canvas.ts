@@ -1,19 +1,10 @@
-// lib/canvas.ts — Canvas動画生成 v11「5スライドカット切り替え版」
-// 【プロデューサー改訂 2026-05-11】
-//   v10からの変更点:
-//   - 1枚静止画 → 5スライド xfade カット切り替え（視聴継続率改善）
-//   - スライド構成: フック(0-3s) → tip1(3-6s) → tip2(6-9s) → tip3(9-12s) → CTA(12-15s)
-//   - 各スライドに独立した zoompan + パーティクルアニメーション
-//   - BGMのみ継続（費用ゼロ）
-//   - 背景画像はスライドごとに軽微に色変化でメリハリ
-//
-// 生成フロー:
-//   1. satori で日本語テキスト付きPNGフレーム生成（1080x1920）
-//   2. FFmpeg:
-//      - PNG に zoompan（ゆっくり1.15倍ズームイン）
-//      - フローティングカラーパーティクル（sin/cos軌道）
-//      - カテゴリBGMをループ再生（-15dB・程よい音量）
-//      - 15秒固定・フェードアウト1秒
+// lib/canvas.ts — Canvas動画生成 v12「SE付き5スライドカット切り替え版」
+// 【プロデューサー改訂 2026-05-11 v12】
+//   v11からの変更点:
+//   - カット切り替え時にSE（ポン音）を追加 → ループ感・メリハリ向上
+//   - SEはFFmpeg lavfi sine波で生成（外部ファイル不要）
+//   - BGMを-13dB → -18dBに下げSEを際立たせる
+//   - フックスライドに背景強調（frame-generatorでopacity調整済み）
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -56,7 +47,7 @@ export interface CanvasOptions {
   category: string;
   title: string;
   points: string[];
-  narration: string;  // v10では使用しない（BGMのみ）
+  narration: string;
   siteUrl: string;
   fullUrl: string;
   ctaText: string;
@@ -68,23 +59,24 @@ const VIDEO_DURATION = 15; // 秒固定（YouTube Shorts）
 const SLIDE_DURATION = 3;   // スライド1枚 = 3秒
 const FADE_DURATION  = 0.3; // スライド間クロスフェード
 
-// ── Canvas動画生成 v11 ────────────────────────────────────────────────────
+// SE: xfade切り替え時のタイミング（秒）
+// スライド0→1: 3-0.3=2.7s, 1→2: 5.7s, 2→3: 8.4s, 3→4: 11.1s
+const SE_TIMES: number[] = [2.7, 5.7, 8.4, 11.1];
+
+// ── Canvas動画生成 v12 ────────────────────────────────────────────────────
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
   const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
   const accent = (CATEGORY_ACCENT[opts.category] || '#74C69D').replace('#', '');
-  const theme  = CANVAS_THEME[opts.category] || CANVAS_THEME.job;
 
   try {
     // ── STEP 1: 5枚のスライドフレームを生成 ─────────────────────────────────
-    // points から tip を3つ取り出す（足りない場合はフォールバック）
     const tips = [
       opts.points[0] || 'ポイント①',
       opts.points[1] || 'ポイント②',
       opts.points[2] || 'ポイント③',
     ];
 
-    // スライド定義
     const slides: Array<{ label: string; title: string; points: string[]; isCta: boolean; slideNum?: number; totalSlides?: number }> = [
       // スライド0: フック（問いかけ・インパクト）
       {
@@ -126,7 +118,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       await writeFile(p, png);
       framePaths.push(p);
     }
-    console.log(`[Canvas v11] ${slides.length}枚のフレーム生成完了`);
+    console.log(`[Canvas v12] ${slides.length}枚のフレーム生成完了`);
 
     // ── STEP 2: BGM 取得 ────────────────────────────────────────────────────
     const bgmFile     = join(process.cwd(), 'public', 'audio', 'bgm', `${opts.category}.mp3`);
@@ -136,21 +128,9 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     try { await access(bgmFile, constants.R_OK); } catch { bgmSrc = bgmFallback; }
     await copyFile(bgmSrc, bgmPath);
 
-    // ── STEP 3: FFmpeg 5スライド xfade 動画生成 ─────────────────────────────
-    // 各スライドを SLIDE_DURATION 秒の動画に変換 → xfade で繋ぐ
-    //
-    // フィルター構造:
-    //   [0] loop→scale→zoompan→particles→fade → [s0]
-    //   [1] loop→scale→zoompan→particles      → [s1]
-    //   ...
-    //   [s0][s1] xfade → [x01]
-    //   [x01][s2] xfade → [x02]
-    //   ...
-    //   [x03][s4] xfade → fade_out → [vid]
-    //   [5:a] volume → fade → [aud]
-
-    const outPath = join(tmpDir, 'canvas.mp4');
-    const nSlides = slides.length; // 5
+    // ── STEP 3: FFmpeg 5スライド xfade + SE 動画生成 ────────────────────────
+    const outPath  = join(tmpDir, 'canvas.mp4');
+    const nSlides  = slides.length; // 5
     const zoomFrames = SLIDE_DURATION * 30; // 90フレーム/スライド
 
     // パーティクル（軽量版: 4個）
@@ -161,14 +141,14 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       { baseX: 400, baseY: 1500, ampX: 90,  ampY: 50,  pX: 8,  pY: 7,  ph: 2.0, size: 18, alpha: 0.05 },
     ];
 
-    // 各スライドのフィルターチェーンを構築
     const filterParts: string[] = [];
 
+    // ── 映像フィルター: 各スライド ──────────────────────────────────────────
     for (let i = 0; i < nSlides; i++) {
-      // zoompan（各スライド独立: ズーム方向を交互に）
+      // zoompan（交互にIN/OUT）
       const zoomDir = i % 2 === 0
-        ? `z='min(zoom+0.00044,1.13)'` // ズームイン
-        : `z='if(eq(on,1),1.13,max(zoom-0.00044,1.0))'`; // ズームアウト
+        ? `z='min(zoom+0.00044,1.13)'`
+        : `z='if(eq(on,1),1.13,max(zoom-0.00044,1.0))'`;
       filterParts.push(
         `[${i}:v]loop=loop=-1:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1[z${i}]`
       );
@@ -183,14 +163,12 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         );
         prev = cur;
       });
-      // スライド出力ラベル（trim: SLIDE_DURATION秒にカット）
       filterParts.push(
         `[${prev}]trim=0:${SLIDE_DURATION},setpts=PTS-STARTPTS[slide${i}]`
       );
     }
 
     // xfade で5スライドを繋ぐ
-    // offset = cumulative_duration - FADE_DURATION
     let xfadeIn = 'slide0';
     for (let i = 1; i < nSlides; i++) {
       const offset = (i * SLIDE_DURATION) - (i * FADE_DURATION) - FADE_DURATION;
@@ -201,19 +179,49 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       xfadeIn = out;
     }
 
-    // 最終フェードアウト（ラスト1秒）
+    // 最終フェードアウト
     const totalDur = VIDEO_DURATION;
     filterParts.push(`[xout]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
 
-    // BGM
-    filterParts.push(`[${nSlides}:a]volume=-13dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[aud]`);
+    // ── 音声フィルター: BGM + SE ──────────────────────────────────────────
+    // BGM: -18dBに下げてSEを際立たせる
+    filterParts.push(`[${nSlides}:a]volume=-18dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[bgm]`);
 
-    // FFmpeg 入力: 5枚フレーム + BGM
+    // SE: 各カット切り替え時に「ポン」音（sine 880Hz, 0.12秒、-12dB）
+    // FFmpeg lavfi で生成、delay で正確なタイミングに配置
+    const seInputIdx = nSlides + 1; // lavfiソースのインデックス
+    // 各SEをdelay + volumeで個別生成
+    const seLabels: string[] = [];
+    SE_TIMES.forEach((t, idx) => {
+      const label = `se${idx}`;
+      const delayMs = Math.round(t * 1000);
+      // sine 880Hz (高め・清音) 120ms, -10dB
+      filterParts.push(
+        `[${seInputIdx}]atrim=start=0:end=0.12,volume=-10dB,adelay=${delayMs}|${delayMs}[${label}]`
+      );
+      seLabels.push(`[${label}]`);
+    });
+
+    // BGM + 全SE をミックス
+    const mixInputs = `[bgm]${seLabels.join('')}`;
+    const mixCount  = 1 + seLabels.length;
+    filterParts.push(
+      `${mixInputs}amix=inputs=${mixCount}:duration=first:normalize=0[aud]`
+    );
+
+    // FFmpeg 入力: 5枚フレーム + BGM + SE(lavfi sine)
     const ffmpegArgs: string[] = ['-y'];
     for (const fp of framePaths) {
       ffmpegArgs.push('-loop', '1', '-framerate', '30', '-i', fp);
     }
+    // BGM（stream_loop）
     ffmpegArgs.push('-stream_loop', '-1', '-i', bgmPath);
+    // SE用 lavfi sine ソース（短い音なので1回のみ・4回分 delay で使い回す）
+    ffmpegArgs.push(
+      '-f', 'lavfi',
+      '-i', `sine=frequency=880:sample_rate=44100:duration=${totalDur}`
+    );
+
     ffmpegArgs.push(
       '-filter_complex', filterParts.join(';'),
       '-map', '[vid]',
@@ -230,12 +238,10 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     );
 
     await execFileAsync(ffmpeg, ffmpegArgs, { maxBuffer: 512 * 1024 * 1024 });
-    console.log(`[Canvas v11] 5スライド動画生成完了 (${totalDur}秒)`);
+    console.log(`[Canvas v12] SE付き5スライド動画生成完了 (${totalDur}秒)`);
     return await readFile(outPath);
 
   } finally {
     await rm(tmpDir, { recursive: true }).catch(() => {});
   }
 }
-
-

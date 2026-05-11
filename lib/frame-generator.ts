@@ -99,85 +99,92 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
     const isCta = slideNum === totalSlides;
     const isHook = slideNum === 1 && totalSlides > 1;
 
-    // スライド進捗インジケーター（● ○ ○ ○ ○）
+    // スライド進捗インジケーター（● ○ ○ ○ ○）- 大型化
     const dots = Array.from({ length: totalSlides }, (_, i): SatoriElement =>
       div({
-        width: '18px', height: '18px', borderRadius: '50%',
+        width: '24px', height: '24px', borderRadius: '50%',
         backgroundColor: i < slideNum ? theme.accent : `${theme.accent}40`,
-        marginRight: '10px',
+        marginRight: '12px',
       }, '')
     );
 
+    // ポイントカード: フォントサイズ52px（モバイル最適化）
     const pointCards = opts.points.slice(0, 5).map((point, i): SatoriElement => {
         const cleanText = point.replace(/^[1-5]\s*/, '').split('\n')[0];
         return div(
           {
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: '20px',
-                    backgroundColor: `${theme.accent}18`,
-                    borderRadius: '12px',
-                    padding: '20px 24px',
-                    border: `2px solid ${theme.accent}50`,
-                    marginBottom: '20px',
+                    gap: '24px',
+                    backgroundColor: `${theme.accent}20`,
+                    borderRadius: '16px',
+                    padding: '24px 28px',
+                    border: `3px solid ${theme.accent}60`,
+                    marginBottom: '24px',
           },
                 [
-                          div({ backgroundColor: theme.accent, color: theme.bg, width: '52px', height: '52px', borderRadius: '50%', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 'bold', flexShrink: 0 }, String(i + 1)),
-                          text(cleanText, { color: '#FFFFFF', fontSize: '40px', lineHeight: '1.4', flex: 1, flexWrap: 'wrap' }),
+                          div({ backgroundColor: theme.accent, color: theme.bg, width: '64px', height: '64px', borderRadius: '50%', alignItems: 'center', justifyContent: 'center', fontSize: '36px', fontWeight: 'bold', flexShrink: 0 }, String(i + 1)),
+                          text(cleanText, { color: '#FFFFFF', fontSize: '52px', lineHeight: '1.4', flex: 1, flexWrap: 'wrap' }),
                         ]
               );
     });
 
-    // スライド別タイトルフォントサイズ
-    const titleFontSize = isCta ? '64px' : isHook ? '72px' : '80px';
+    // スライド別タイトルフォントサイズ（2倍化: モバイル最適化）
+    const titleFontSize = isCta ? '80px' : isHook ? '96px' : '100px';
 
     const rootElement: SatoriElement = div(
     { width: '1080px', height: '1920px', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: 'NotoSansJP', backgroundColor: theme.bg },
         [
-                ...(bgDataUri ? [{ type: 'img', props: { src: bgDataUri, style: { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', objectFit: 'cover', opacity: 0.3 } } } as SatoriElement] : []),
-                div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', backgroundColor: `${theme.bg}CC` }, ''),
-                // アクセントライン
-                div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '10px', backgroundColor: theme.accent }, ''),
-                div({ position: 'absolute', top: 0, left: 0, width: '8px', height: '1920px', backgroundColor: theme.accent }, ''),
-                div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '10px', backgroundColor: theme.accent }, ''),
+                ...(bgDataUri ? [{ type: 'img', props: { src: bgDataUri, style: { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', objectFit: 'cover', opacity: 0.55 } } } as SatoriElement] : []),
+                // グラデーションオーバーレイ（背景に深み）
+                div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', background: `linear-gradient(180deg, ${theme.bg}EE 0%, ${theme.bg}99 50%, ${theme.bg}EE 100%)` }, ''),
+                // アクセントライン（太め）
+                div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
+                div({ position: 'absolute', top: 0, left: 0, width: '10px', height: '1920px', backgroundColor: theme.accent }, ''),
+                div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '14px', backgroundColor: theme.accent }, ''),
+                div({ position: 'absolute', top: 0, right: 0, width: '10px', height: '1920px', backgroundColor: `${theme.accent}60` }, ''),  // 右側も薄く
                 div(
                   { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', flexDirection: 'column', padding: '60px 60px 60px 80px' },
                           [
                             // ヘッダー行: ラベル + スライド番号ドット
-                            div({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }, [
-                              text(theme.label, { fontSize: '38px', color: theme.accent, fontWeight: 'bold' }),
+                            div({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }, [
+                              text(theme.label, { fontSize: '44px', color: theme.accent, fontWeight: 'bold', letterSpacing: '2px' }),
                               div({ flexDirection: 'row', alignItems: 'center' }, dots),
                             ]),
-                            div({ width: '100%', height: '3px', backgroundColor: `${theme.accent}60`, marginBottom: '32px' }, ''),
+                            div({ width: '100%', height: '4px', backgroundColor: `${theme.accent}80`, marginBottom: '36px' }, ''),
                             // タイトル（スライド種別で色変化）
                             div({
                               flexDirection: 'column',
-                              borderLeft: `8px solid ${theme.accent}`,
-                              paddingLeft: '24px',
-                              marginBottom: isCta ? '40px' : '48px',
-                              backgroundColor: isHook ? `${theme.accent}10` : 'transparent',
-                              padding: isHook ? '20px 20px 20px 24px' : '0 0 0 24px',
-                              borderRadius: isHook ? '0 12px 12px 0' : '0',
-                            }, text(opts.title, { fontSize: titleFontSize, fontWeight: 'bold', color: isHook ? theme.accent : '#FFFFFF', lineHeight: '1.35', flexWrap: 'wrap' })),
+                              borderLeft: `10px solid ${theme.accent}`,
+                              paddingLeft: '28px',
+                              marginBottom: isCta ? '48px' : '56px',
+                              backgroundColor: isHook ? `${theme.accent}18` : `${theme.accent}08`,
+                              padding: isHook ? '28px 24px 28px 28px' : '16px 16px 16px 28px',
+                              borderRadius: isHook ? '0 16px 16px 0' : '0 8px 8px 0',
+                            }, text(opts.title, { fontSize: titleFontSize, fontWeight: 'bold', color: isHook ? theme.accent : '#FFFFFF', lineHeight: '1.3', flexWrap: 'wrap' })),
                             // ポイントカード or CTA専用コンテンツ
                             ...(isCta
                               ? [
-                                  div({ flexDirection: 'column', gap: '24px', flex: 1 }, opts.points.map((p): SatoriElement =>
-                                    div({ flexDirection: 'row', alignItems: 'center', gap: '20px',
-                                          backgroundColor: `${theme.accent}20`, borderRadius: '16px', padding: '24px 32px',
-                                          border: `2px solid ${theme.accent}` },
-                                      text(p, { color: theme.accent, fontSize: '48px', fontWeight: 'bold' })
+                                  // CTA: スワイプ誘導テキスト（最上部）
+                                  div({ flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }, [
+                                    text('👆 今すぐ上にスワイプ！', { color: theme.accent, fontSize: '52px', fontWeight: 'bold' }),
+                                  ]),
+                                  div({ flexDirection: 'column', gap: '28px', flex: 1 }, opts.points.map((p): SatoriElement =>
+                                    div({ flexDirection: 'row', alignItems: 'center', gap: '24px',
+                                          backgroundColor: `${theme.accent}25`, borderRadius: '20px', padding: '28px 36px',
+                                          border: `3px solid ${theme.accent}` },
+                                      text(p, { color: '#FFFFFF', fontSize: '56px', fontWeight: 'bold' })
                                     )
                                   )),
-                                  div({ flexDirection: 'column', backgroundColor: `${theme.accent}20`, border: `3px solid ${theme.accent}`, borderRadius: '16px', padding: '28px 36px', marginTop: '32px' }, [
-                                    text(opts.ctaText, { color: theme.accent, fontSize: '38px', fontWeight: 'bold', marginBottom: '8px' }),
-                                    text(opts.siteUrl, { color: '#AAAAAA', fontSize: '32px' }),
+                                  div({ flexDirection: 'column', backgroundColor: `${theme.accent}30`, border: `4px solid ${theme.accent}`, borderRadius: '20px', padding: '32px 40px', marginTop: '36px' }, [
+                                    text(opts.ctaText, { color: theme.accent, fontSize: '48px', fontWeight: 'bold', marginBottom: '12px' }),
+                                    text(opts.siteUrl, { color: '#CCCCCC', fontSize: '38px' }),
                                   ]),
                                 ]
                               : [
                                   div({ flexDirection: 'column', flex: 1 }, pointCards),
-                                  ...(!isHook ? [div({ flexDirection: 'column', backgroundColor: `${theme.accent}10`, border: `2px solid ${theme.accent}50`, borderRadius: '16px', padding: '20px 28px', marginTop: '20px' }, [
-                                    text(opts.siteUrl, { color: '#AAAAAA', fontSize: '30px' }),
+                                  ...(!isHook ? [div({ flexDirection: 'column', backgroundColor: `${theme.accent}12`, border: `2px solid ${theme.accent}60`, borderRadius: '16px', padding: '24px 32px', marginTop: '24px' }, [
+                                    text(opts.siteUrl, { color: '#BBBBBB', fontSize: '36px' }),
                                   ])] : []),
                                 ]
                             ),
