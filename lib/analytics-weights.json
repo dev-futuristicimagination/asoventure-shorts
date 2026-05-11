@@ -1,36 +1,28 @@
 {
-  "updatedAt": "2026-05-10T13:00:01.356Z",
-  "source": "youtube-analytics-cron",
+  "updatedAt": "2026-05-11T00:29:00.000Z",
+  "source": "producer-manual-update",
+  "note": "music1963=0: 平均1回再生、アルゴリズムが昭和音楽チャンネルと誤認識するリスク。cheese/jobに集中。Veo3昇格基準を現実的に引き下げ。",
+  "veo3Thresholds": {
+    "itemPromotion": { "days": 3, "views": 150, "likeRate": 0.005 },
+    "categoryPromotion": { "days": 14, "avgViews": 250, "minVideos": 5 },
+    "categoryDemotion": { "days": 14, "avgViews": 100 }
+  },
   "weights": {
-    "cheese": 8,
-    "job": 8,
-    "finance": 6,
-    "music1963": 2
+    "cheese":    10,
+    "job":       10,
+    "finance":   4,
+    "health":    3,
+    "life":      3,
+    "education": 2,
+    "music1963": 0
   },
   "raw": [
-    {
-      "category": "cheese",
-      "avgViews": 308,
-      "videoCount": 2,
-      "recommendedWeight": 8
-    },
-    {
-      "category": "job",
-      "avgViews": 224,
-      "videoCount": 3,
-      "recommendedWeight": 8
-    },
-    {
-      "category": "finance",
-      "avgViews": 103,
-      "videoCount": 7,
-      "recommendedWeight": 6
-    },
-    {
-      "category": "music1963",
-      "avgViews": 1,
-      "videoCount": 2,
-      "recommendedWeight": 2
-    }
+    { "category": "cheese",    "avgViews": 308,  "videoCount": 2,  "recommendedWeight": 10, "trend": "↑ 最高79461回の実績あり。集中投下" },
+    { "category": "job",       "avgViews": 224,  "videoCount": 3,  "recommendedWeight": 10, "trend": "↑ 475回・375回の高再生が出ている" },
+    { "category": "finance",   "avgViews": 103,  "videoCount": 7,  "recommendedWeight": 4,  "trend": "→ 安定しているが単価低め" },
+    { "category": "health",    "avgViews": 55,   "videoCount": 2,  "recommendedWeight": 3,  "trend": "→ 少量テスト継続" },
+    { "category": "life",      "avgViews": 50,   "videoCount": 2,  "recommendedWeight": 3,  "trend": "→ 少量テスト継続" },
+    { "category": "education", "avgViews": 34,   "videoCount": 1,  "recommendedWeight": 2,  "trend": "↓ 少量のみ" },
+    { "category": "music1963", "avgViews": 1,    "videoCount": 2,  "recommendedWeight": 0,  "trend": "❌ 停止 2026-05-11" }
   ]
 }

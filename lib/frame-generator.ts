@@ -67,6 +67,8 @@ export interface FrameOptions {
     siteUrl: string;
     ctaText: string;
     bgImageUrl?: string;
+    slideNum?: number;    // v11: スライド番号 (1〜5)
+    totalSlides?: number; // v11: スライド総数
 }
 
 type SatoriChild = SatoriElement | string | null;
@@ -92,8 +94,21 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
     const theme = THEME[opts.category] || THEME.health;
     const font = await loadFont();
     const bgDataUri = await loadBgImageAsDataUri(opts.category, opts.bgImageUrl);
+    const slideNum = opts.slideNum || 1;
+    const totalSlides = opts.totalSlides || 1;
+    const isCta = slideNum === totalSlides;
+    const isHook = slideNum === 1 && totalSlides > 1;
 
-  const pointCards = opts.points.slice(0, 5).map((point, i): SatoriElement => {
+    // スライド進捗インジケーター（● ○ ○ ○ ○）
+    const dots = Array.from({ length: totalSlides }, (_, i): SatoriElement =>
+      div({
+        width: '18px', height: '18px', borderRadius: '50%',
+        backgroundColor: i < slideNum ? theme.accent : `${theme.accent}40`,
+        marginRight: '10px',
+      }, '')
+    );
+
+    const pointCards = opts.points.slice(0, 5).map((point, i): SatoriElement => {
         const cleanText = point.replace(/^[1-5]\s*/, '').split('\n')[0];
         return div(
           {
@@ -111,33 +126,67 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
                           text(cleanText, { color: '#FFFFFF', fontSize: '40px', lineHeight: '1.4', flex: 1, flexWrap: 'wrap' }),
                         ]
               );
-  });
+    });
 
-  const rootElement: SatoriElement = div(
+    // スライド別タイトルフォントサイズ
+    const titleFontSize = isCta ? '64px' : isHook ? '72px' : '80px';
+
+    const rootElement: SatoriElement = div(
     { width: '1080px', height: '1920px', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: 'NotoSansJP', backgroundColor: theme.bg },
         [
                 ...(bgDataUri ? [{ type: 'img', props: { src: bgDataUri, style: { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', objectFit: 'cover', opacity: 0.3 } } } as SatoriElement] : []),
                 div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', backgroundColor: `${theme.bg}CC` }, ''),
+                // アクセントライン
                 div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '10px', backgroundColor: theme.accent }, ''),
                 div({ position: 'absolute', top: 0, left: 0, width: '8px', height: '1920px', backgroundColor: theme.accent }, ''),
                 div({ position: 'absolute', bottom: 0, left: 0, width: '1080px', height: '10px', backgroundColor: theme.accent }, ''),
                 div(
                   { position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px', flexDirection: 'column', padding: '60px 60px 60px 80px' },
                           [
-                                      text(theme.label, { fontSize: '38px', color: theme.accent, fontWeight: 'bold', marginBottom: '16px' }),
-                                      div({ width: '100%', height: '3px', backgroundColor: `${theme.accent}60`, marginBottom: '32px' }, ''),
-                                      div({ flexDirection: 'column', borderLeft: `8px solid ${theme.accent}`, paddingLeft: '24px', marginBottom: '48px' }, text(opts.title, { fontSize: '68px', fontWeight: 'bold', color: '#FFFFFF', lineHeight: '1.35', flexWrap: 'wrap' })),
-                                      div({ flexDirection: 'column', flex: 1 }, pointCards),
-                                      div({ flexDirection: 'column', backgroundColor: `${theme.accent}20`, border: `3px solid ${theme.accent}`, borderRadius: '16px', padding: '28px 36px', marginTop: '24px' }, [
-                                                    text(opts.ctaText, { color: theme.accent, fontSize: '38px', fontWeight: 'bold', marginBottom: '8px' }),
-                                                    text(opts.siteUrl, { color: '#AAAAAA', fontSize: '32px' }),
-                                                  ]),
-                                    ]
-                        ),
+                            // ヘッダー行: ラベル + スライド番号ドット
+                            div({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }, [
+                              text(theme.label, { fontSize: '38px', color: theme.accent, fontWeight: 'bold' }),
+                              div({ flexDirection: 'row', alignItems: 'center' }, dots),
+                            ]),
+                            div({ width: '100%', height: '3px', backgroundColor: `${theme.accent}60`, marginBottom: '32px' }, ''),
+                            // タイトル（スライド種別で色変化）
+                            div({
+                              flexDirection: 'column',
+                              borderLeft: `8px solid ${theme.accent}`,
+                              paddingLeft: '24px',
+                              marginBottom: isCta ? '40px' : '48px',
+                              backgroundColor: isHook ? `${theme.accent}10` : 'transparent',
+                              padding: isHook ? '20px 20px 20px 24px' : '0 0 0 24px',
+                              borderRadius: isHook ? '0 12px 12px 0' : '0',
+                            }, text(opts.title, { fontSize: titleFontSize, fontWeight: 'bold', color: isHook ? theme.accent : '#FFFFFF', lineHeight: '1.35', flexWrap: 'wrap' })),
+                            // ポイントカード or CTA専用コンテンツ
+                            ...(isCta
+                              ? [
+                                  div({ flexDirection: 'column', gap: '24px', flex: 1 }, opts.points.map((p): SatoriElement =>
+                                    div({ flexDirection: 'row', alignItems: 'center', gap: '20px',
+                                          backgroundColor: `${theme.accent}20`, borderRadius: '16px', padding: '24px 32px',
+                                          border: `2px solid ${theme.accent}` },
+                                      text(p, { color: theme.accent, fontSize: '48px', fontWeight: 'bold' })
+                                    )
+                                  )),
+                                  div({ flexDirection: 'column', backgroundColor: `${theme.accent}20`, border: `3px solid ${theme.accent}`, borderRadius: '16px', padding: '28px 36px', marginTop: '32px' }, [
+                                    text(opts.ctaText, { color: theme.accent, fontSize: '38px', fontWeight: 'bold', marginBottom: '8px' }),
+                                    text(opts.siteUrl, { color: '#AAAAAA', fontSize: '32px' }),
+                                  ]),
+                                ]
+                              : [
+                                  div({ flexDirection: 'column', flex: 1 }, pointCards),
+                                  ...(!isHook ? [div({ flexDirection: 'column', backgroundColor: `${theme.accent}10`, border: `2px solid ${theme.accent}50`, borderRadius: '16px', padding: '20px 28px', marginTop: '20px' }, [
+                                    text(opts.siteUrl, { color: '#AAAAAA', fontSize: '30px' }),
+                                  ])] : []),
+                                ]
+                            ),
+                          ]
+                ),
               ]
       );
 
-  const svg = await satori(rootElement as any, { width: 1080, height: 1920, fonts: [{ name: 'NotoSansJP', data: font, weight: 400, style: 'normal' }] });
+    const svg = await satori(rootElement as any, { width: 1080, height: 1920, fonts: [{ name: 'NotoSansJP', data: font, weight: 400, style: 'normal' }] });
     const sharp = require('sharp');
     const pngBuf = await sharp(Buffer.from(svg)).png().toBuffer();
     return pngBuf;
