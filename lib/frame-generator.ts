@@ -1,7 +1,7 @@
 import satori from 'satori';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { readFile as readFileAsync } from 'fs/promises';
+import { readFile } from 'fs/promises';
 
 const THEME: Record<string, { bg: string; accent: string; label: string }> = {
     health:    { bg: '#0D2B1F', accent: '#74C69D', label: 'HEALTH' },
@@ -14,25 +14,29 @@ const THEME: Record<string, { bg: string; accent: string; label: string }> = {
     music1963: { bg: '#0D0020', accent: '#F8BBD0', label: 'MUSIC1963' },
 };
 
-let fontCache: ArrayBuffer | null = null;
+let _fontNoto: Buffer | null = null;
+let _fontEmoji: Buffer | null = null;
 
-async function loadFont(): Promise<ArrayBuffer> {
-    if (fontCache) return fontCache;
-    const fontPath = join(process.cwd(), 'public', 'fonts', 'NotoSansJP-satori.ttf');
-    let buf: Buffer | null = null;
-    if (existsSync(fontPath)) {
-          buf = await readFileAsync(fontPath);
+async function loadFonts() {
+  if (!_fontNoto) {
+    _fontNoto = await readFile(join(process.cwd(), 'public', 'fonts', 'NotoSansJP-satori.ttf'));
+  }
+  if (!_fontEmoji) {
+    const emojiPath = join(process.cwd(), 'public', 'fonts', 'NotoEmoji-Regular.ttf');
+    if (existsSync(emojiPath)) {
+      _fontEmoji = await readFile(emojiPath);
     } else {
-          const res = await fetch(
-                  'https://fonts.gstatic.com/s/notosansjp/v53/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEi75vY0rw-oME.ttf',
-            { signal: AbortSignal.timeout(10000) }
-                );
-          if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
-          const ab = await res.arrayBuffer();
-          buf = Buffer.from(ab);
+      // Vercel環境ではGoogle Fontsから起動時にダウンロード
+      try {
+        const res = await fetch(
+          'https://fonts.gstatic.com/s/notoemoji/v49/bMrnmSyK7YY-MEu6aWjPDs-ar6uWaGWuob-r0jiCs2ZVXV0.ttf',
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (res.ok) _fontEmoji = Buffer.from(await res.arrayBuffer());
+      } catch { console.warn('[frame-generator] NotoEmojiダウンロード失敗。絵文字は「□」になります。'); }
     }
-    fontCache = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
-    return fontCache;
+  }
+  return { noto: _fontNoto!, emoji: _fontEmoji };
 }
 
 async function loadBgImageAsDataUri(category: string, bgImageUrl?: string): Promise<string | null> {
@@ -50,14 +54,24 @@ async function loadBgImageAsDataUri(category: string, bgImageUrl?: string): Prom
                   console.warn('[FrameGen] OGP fetch failed:', err);
           }
     }
-    const bgPath = join(process.cwd(), 'public', 'images', 'bg', `${category}.png`);
-    if (!existsSync(bgPath)) return null;
-    try {
-          const buf = await readFileAsync(bgPath);
-          return `data:image/png;base64,${buf.toString('base64')}`;
-    } catch {
-          return null;
-    }
+    return null;
+}
+
+// 絵文字をテキスト代替に変換（NotoEmoji未取得時のフォールバック）
+// フォント内包時は emoji=true でスキップ
+function stripEmoji(text: string, hasEmojiFont: boolean): string {
+  if (hasEmojiFont) return text;
+  // 主要絵文字を意味のある記号に置換
+  return text
+    .replace(/👎/g, '(y)')
+    .replace(/👍/g, '(y)')
+    .replace(/🔔/g, '(bell)')
+    .replace(/💬/g, '>>')
+    .replace(/👆/g, '^')
+    .replace(/📄/g, '[doc]')
+    .replace(/✨/g, '*')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // その他の絵文字を削除
+    .trim();
 }
 
 export interface FrameOptions {
@@ -67,8 +81,8 @@ export interface FrameOptions {
     siteUrl: string;
     ctaText: string;
     bgImageUrl?: string;
-    slideNum?: number;    // v11: スライド番号 (1〜5)
-    totalSlides?: number; // v11: スライド総数
+    slideNum?: number;
+    totalSlides?: number;
 }
 
 type SatoriChild = SatoriElement | string | null;
@@ -92,14 +106,13 @@ function text(content: string, style: Record<string, unknown>): SatoriElement {
 
 export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
     const theme = THEME[opts.category] || THEME.health;
-    const font = await loadFont();
+    const { noto, emoji } = await loadFonts();
     const bgDataUri = await loadBgImageAsDataUri(opts.category, opts.bgImageUrl);
     const slideNum = opts.slideNum || 1;
     const totalSlides = opts.totalSlides || 1;
     const isCta = slideNum === totalSlides;
     const isHook = slideNum === 1 && totalSlides > 1;
 
-    // スライド進捗インジケーター（● ○ ○ ○ ○）- 大型化
     const dots = Array.from({ length: totalSlides }, (_, i): SatoriElement =>
       div({
         width: '24px', height: '24px', borderRadius: '50%',
@@ -108,7 +121,6 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
       }, '')
     );
 
-    // ポイントカード: フォントサイズ52px（モバイル最適化）
     const pointCards = opts.points.slice(0, 5).map((point, i): SatoriElement => {
         const cleanText = point.replace(/^[1-5]\s*/, '').split('\n')[0];
         return div(
@@ -130,7 +142,10 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
     });
 
     // スライド別タイトルフォントサイズ（2倍化: モバイル最適化）
-    const titleFontSize = isCta ? '80px' : isHook ? '96px' : '100px';
+    const titleFontSize = isCta ? '80px' : isHook ? '96px' : '88px';
+
+    // hookスライドはタイトルのみ表示（ポイントカード非表示・インパクト最大化）
+    const showPointCards = !isHook;
 
     const rootElement: SatoriElement = div(
     { width: '1080px', height: '1920px', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: 'NotoSansJP', backgroundColor: theme.bg },
@@ -181,20 +196,28 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
                                     text(opts.siteUrl, { color: '#CCCCCC', fontSize: '38px' }),
                                   ]),
                                 ]
-                              : [
-                                  div({ flexDirection: 'column', flex: 1 }, pointCards),
-                                  ...(!isHook ? [div({ flexDirection: 'column', backgroundColor: `${theme.accent}12`, border: `2px solid ${theme.accent}60`, borderRadius: '16px', padding: '24px 32px', marginTop: '24px' }, [
-                                    text(opts.siteUrl, { color: '#BBBBBB', fontSize: '36px' }),
-                                  ])] : []),
-                                ]
+                              : showPointCards
+                                ? [
+                                    div({ flexDirection: 'column', flex: 1 }, pointCards),
+                                    div({ flexDirection: 'column', backgroundColor: `${theme.accent}12`, border: `2px solid ${theme.accent}60`, borderRadius: '16px', padding: '24px 32px', marginTop: '24px' }, [
+                                      text(opts.siteUrl, { color: '#BBBBBB', fontSize: '36px' }),
+                                    ]),
+                                  ]
+                                : [] // hookスライド: ポイントカードなし・タイトルのみ
                             ),
                           ]
                 ),
               ]
       );
 
-    const svg = await satori(rootElement as any, { width: 1080, height: 1920, fonts: [{ name: 'NotoSansJP', data: font, weight: 400, style: 'normal' }] });
-    const sharp = require('sharp');
-    const pngBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+    const satorifonts: Parameters<typeof satori>[1]['fonts'] = [
+      { name: 'NotoSansJP', data: noto, weight: 400, style: 'normal' },
+      { name: 'NotoSansJP', data: noto, weight: 700, style: 'normal' },
+      ...(emoji ? [{ name: 'NotoEmoji', data: emoji, weight: 400, style: 'normal' as const }] : []),
+    ];
+
+    const svg = await satori(rootElement as any, { width: 1080, height: 1920, fonts: satorifonts });
+    const sharpMod = require('sharp');
+    const pngBuf = await sharpMod(Buffer.from(svg)).png().toBuffer();
     return pngBuf;
 }
