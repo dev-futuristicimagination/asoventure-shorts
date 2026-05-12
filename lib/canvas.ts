@@ -157,28 +157,27 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     }
     console.log(`[Canvas v12] ${slides.length}枚のフレーム生成完了`);
 
-    // -- STEP 2: BGM + TTS +  --
-    // TTS5 -> 20 
-    const bgmFile     = join(process.cwd(), 'public', 'audio', 'bgm', `\.mp3`);
-    const bgmFallback = join(process.cwd(), 'public', 'audio', 'bgm', 'lofi.mp3');
-    const bgmPath     = join(tmpDir, 'bgm.mp3');
+    // -- STEP 2: BGM + TTS (parallel) --
+    const bgmFile     = join(process.cwd(), "public", "audio", "bgm", opts.category + ".mp3");
+    const bgmFallback = join(process.cwd(), "public", "audio", "bgm", "lofi.mp3");
+    const bgmPath     = join(tmpDir, "bgm.mp3");
     let bgmSrc = bgmFile;
     try { await access(bgmFile, constants.R_OK); } catch { bgmSrc = bgmFallback; }
     const [, ttsResult] = await Promise.all([
       copyFile(bgmSrc, bgmPath),
       opts.enableTTS
         ? generateTTS(opts.narration, opts.category).catch((e: unknown) => {
-            console.warn('[Canvas] TTS(BGM):', e); return null;
+            console.warn("[Canvas] TTS failed, BGM only:", e); return null;
           })
         : Promise.resolve(null),
     ]);
     let ttsPath: string | null = null;
     if (ttsResult) {
-      ttsPath = join(tmpDir, 'tts.wav');
+      ttsPath = join(tmpDir, "tts.wav");
       await writeFile(ttsPath, ttsResult.audioBuffer);
-      console.log(`[Canvas v12] TTS: \B dur=\s`);
+      console.log("[Canvas v12] TTS saved: " + ttsResult.audioBuffer.length + "B dur=" + ttsResult.durationEstimate.toFixed(1) + "s");
     } else if (opts.enableTTS) {
-      console.log('[Canvas v12] TTS -> BGM');
+      console.log("[Canvas v12] TTS failed/skip -> BGM only");
     }
 
     // ── STEP 3: FFmpeg 5スライド xfade + SE 動画生成 ────────────────────────
