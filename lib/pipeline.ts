@@ -5,7 +5,7 @@ import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
 import { getYouTubeToken, uploadToYouTube, postToBuffer, postToBufferMultiChannel, uploadCaptions, postEngagementComment, addToPlaylist, generateSRT } from './youtube';
 
 import { savePending, loadPending, clearPending } from './github';
-import { generateDynamicContent, notifyDiscord } from './gemini';
+import { generateDynamicContent, notifyDiscord, generateBackgroundImage } from './gemini';
 import { generateCanvasVideo } from './canvas';
 import type { ShortItem, CtaConfig, PendingData, CanvasItem } from './types';
 import { execFile } from 'child_process';
@@ -330,12 +330,16 @@ export async function phaseCanvas(
   category: string,
   item: CanvasItem,
   cta: CtaConfig,
-  enableTTS = true  // 全カテゴリでTTS+字幕同期を有効化（2026-05-12 producer版）
+  enableTTS = false  // BGM-onlyモード（TTS同期問題のため無効化 2026-05-12）
 ): Promise<{ ok: boolean; message: string; youtubeUrl?: string }> {
   try {
     // Canvas動画生成（FFmpegのみ・Veo3不要）
     // hookTitle: Gemini で疑問文フックを生成（なければtitleをそのまま使用）
-    const generated = await generateDynamicContent(item.topic, item.narration, category);
+    const [generated, imagenBg] = await Promise.all([
+      generateDynamicContent(item.topic, item.narration, category),
+      // Imagen 3でカテゴリ別背景を生成（Google Ultraプラン活用・bgImageUrl未指定時）
+      item.bgImageUrl ? Promise.resolve(null) : generateBackgroundImage(category),
+    ]);
     const finalTitle = generated.title || item.title;
     const hookTitle  = generated.hookTitle || item.hookTitle;
 
@@ -345,11 +349,12 @@ export async function phaseCanvas(
       hookTitle,
       points: item.points,
       narration: generated.narration || item.narration,
-      narrationPerSlide: generated.narrationPerSlide, // ← 字幕完全同期（全カテゴリ対応）
+      narrationPerSlide: generated.narrationPerSlide,
       siteUrl: item.siteUrl,
       fullUrl: item.fullUrl,
       ctaText: item.ctaText,
-      lang: item.lang ?? 'ja', bgImageUrl: item.bgImageUrl,
+      lang: item.lang ?? 'ja',
+      bgImageUrl: item.bgImageUrl || imagenBg || undefined, // Imagen生成 > 静的bg > グラデーション
       enableTTS,
     });
 

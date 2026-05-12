@@ -349,3 +349,70 @@ export async function generateTTS(narration: string, category: string): Promise<
     return null;
   }
 }
+
+// ─── Imagen 3 背景画像生成（Google Ultra プラン活用）────────────────────────
+// カテゴリ別のShortsに最適な背景をAI生成する
+// モデル: imagen-3.0-generate-002（高品質・商用利用可）
+
+const IMAGEN_PROMPTS: Record<string, string> = {
+  job:       'dark professional office at night, city lights bokeh background, dramatic lighting, cinematic, 9:16 portrait, ultra detailed',
+  health:    'serene forest morning mist, green nature wellness, soft light rays, peaceful, cinematic 9:16 portrait',
+  finance:   'abstract financial data visualization, dark blue background, glowing gold charts, premium, cinematic 9:16',
+  cheese:    'modern cozy cafe study space, warm amber lighting, laptop open, career growth vibes, 9:16 portrait',
+  education: 'open book with glowing knowledge particles, dark blue background, learning concept, cinematic 9:16',
+  life:      'minimalist lifestyle flat lay, warm tones, cozy home aesthetic, golden hour light, 9:16 portrait',
+  japan:     'traditional japanese temple torii gate, fog, sakura petals, cinematic, 9:16 portrait',
+  music1963: 'vintage vinyl record player, warm amber glow, retro nostalgia, 1960s aesthetic, cinematic 9:16',
+  retro:     'retro pixel game controller glowing, dark background, nostalgia 80s vibes, cinematic 9:16',
+};
+
+export async function generateBackgroundImage(category: string): Promise<string | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+
+  const prompt = IMAGEN_PROMPTS[category] || IMAGEN_PROMPTS.job;
+
+  try {
+    const res = await fetch(
+      `${GEMINI_API}/v1beta/models/imagen-3.0-generate-002:predict?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: '9:16',  // Shorts縦型
+            safetyFilterLevel: 'block_some',
+            personGeneration: 'allow_adult',
+          },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn('[Imagen] API error:', res.status, err.slice(0, 200));
+      return null;
+    }
+
+    const json = await res.json() as {
+      predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+    };
+
+    const pred = json.predictions?.[0];
+    if (!pred?.bytesBase64Encoded) {
+      console.warn('[Imagen] no image in response');
+      return null;
+    }
+
+    const mime = pred.mimeType || 'image/png';
+    const dataUri = `data:${mime};base64,${pred.bytesBase64Encoded}`;
+    console.log('[Imagen] 背景生成成功 category=' + category + ' mime=' + mime);
+    return dataUri;
+
+  } catch (e) {
+    console.warn('[Imagen] failed:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
