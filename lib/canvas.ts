@@ -253,7 +253,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         // BGM: -22dBに下げTTSを際立たせる
         `[${nSlides}:a]volume=-22dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[bgm]`,
         // TTS: 先頭から再生・音量-8dB（自然なナレーション音量）
-        `[${ttsIdx}:a]volume=-8dB,afade=t=in:st=0:d=0.5,afade=t=out:st=${totalDur - 1.5}:d=1.5[tts]`
+        `[${ttsIdx}:a]volume=-8dB,afade=t=in:st=0:d=0.5,atrim=0:${totalDur},asetpts=PTS-STARTPTS[tts]`
       );
       // SE生成
       SE_TIMES.forEach((t, idx) => {
