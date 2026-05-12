@@ -100,7 +100,7 @@ const SE_TIMES: number[] = [2.7, 5.7, 8.4, 11.1];
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
   const ffmpeg = process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg';
   const tmpDir = await mkdtemp(join(tmpdir(), 'canvas-'));
-  const accent = (CATEGORY_ACCENT[opts.category] || '#74C69D').replace('#', '');
+  const accent = (CATEGORY_ACCENT[opts.category] || '#F5A623').replace('#', '');
 
   // 背景: OGP URL → bg-library → undefined の優先順位で選択
   const bgSource = await pickBgFromLibrary(opts.category, opts.bgImageUrl);
@@ -213,19 +213,18 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         `[${i}:v]loop=loop=-1:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1[z${i}]`
       );
       // パーティクル追加
-      let prev = `z${i}`;
+      // パーティクル（固定位置・スライドごとにオフセット）
+      // drawboxはt変数非対応のため固定座標を使用
+      const slideOffset = i * 137; // 黄金角オフセットで自然なばらつき
       pParams.forEach((p, pi) => {
         const cur = `s${i}p${pi}`;
-        const x = `${p.baseX}+${p.ampX}*sin(2*PI*t/${p.pX}+${p.ph.toFixed(2)})`;
-        const y = `${p.baseY}+${p.ampY}*cos(2*PI*t/${p.pY}+${p.ph.toFixed(2)})`;
+        const px = (p.baseX + slideOffset * p.ampX / 100) % 1080;
+        const py = (p.baseY + slideOffset * p.ampY / 100) % 1900;
         filterParts.push(
-          `[${prev}]drawbox=x='${x}':y='${y}':w=${p.size}:h=${p.size}:color=${accent}@${p.alpha.toFixed(2)}:t=fill[${cur}]`
+          `[${prev}]drawbox=x=${Math.round(px)}:y=${Math.round(py)}:w=${p.size}:h=${p.size}:color=${accent}@${p.alpha.toFixed(2)}:t=fill[${cur}]`
         );
         prev = cur;
       });
-      filterParts.push(
-        `[${prev}]trim=0:${SLIDE_DURATION},setpts=PTS-STARTPTS[slide${i}]`
-      );
     }
 
     // xfade で5スライドを繋ぐ
