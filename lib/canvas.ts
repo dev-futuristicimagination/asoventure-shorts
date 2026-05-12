@@ -208,7 +208,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       const zoomDir = i % 2 === 0
         ? `z='min(zoom+0.00044,1.13)'`
         : `z='if(eq(on,1),1.13,max(zoom-0.00044,1.0))'`;
-      filterParts.push(
+        `[${i}:v]loop=loop=-1:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1,fps=fps=30[z${i}]`
         `[${i}:v]loop=loop=-1:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1[z${i}]`
       );
       // パーティクル（固定位置・スライドごとにオフセット - drawboxはt変数非対応）
