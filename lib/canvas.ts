@@ -167,16 +167,9 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       return Array(slides.length).fill('');
     })();
 
-    // ── スライド表示時間: narrationPerSlide がある場合は文字数比例で調整
-    const slideDurs: number[] = (() => {
-      const hasPerSlide = opts.enableTTS && subtitleChunks.some(s => s.trim().length > 0);
-      if (hasPerSlide) {
-        const durs = calcSlideDurations(subtitleChunks, VIDEO_DURATION);
-        console.log('[Canvas] 比例スライド時間: ' + durs.join('s, ') + 's');
-        return durs;
-      }
-      return Array(slides.length).fill(DEFAULT_SLIDE_DURATION);
-    })();
+    // ── スライド表示時間: 均等3秒固定（比例タイミングはGemini文章長のばらつきで逆効果のため廃止）
+    const slideDurs: number[] = Array(slides.length).fill(DEFAULT_SLIDE_DURATION);
+    console.log('[Canvas] スライド時間: 均等 ' + DEFAULT_SLIDE_DURATION + 's × ' + slides.length);
 
     const framePaths: string[] = [];
     for (let si = 0; si < slides.length; si++) {
