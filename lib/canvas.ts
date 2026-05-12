@@ -43,6 +43,8 @@ export const CANVAS_THEME: Record<string, {
   job:       { bg1: '#0F2027', bg2: '#080F18', bgSlide: '#040810', accent: '#F5A623', textColor: 'white', emoji: '💼', siteName: 'asoventure JOB' },
   cheese:    { bg1: '#2A1500', bg2: '#100600', bgSlide: '#080300', accent: '#FFD700', textColor: 'white', emoji: '🧀', siteName: 'Asoventure Cheese' },
   music1963: { bg1: '#1A0533', bg2: '#0D0020', bgSlide: '#060015', accent: '#F8BBD0', textColor: 'white', emoji: '🎵', siteName: 'music1963' },
+  station:   { bg1: '#0D2137', bg2: '#061220', bgSlide: '#030C18', accent: '#66B2FF', textColor: 'white', emoji: '🚉', siteName: 'Asoventure Station' },
+  retro:     { bg1: '#1A0A2E', bg2: '#0D0518', bgSlide: '#07030F', accent: '#FF6AD5', textColor: 'white', emoji: '🎮', siteName: 'asoventure RETRO' },
 };
 
 export interface CanvasOptions {
@@ -140,11 +142,14 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       { label: 'tip1', title: tips[0], points: [], isCta: false, slideNum: 2, totalSlides: 5 },
       { label: 'tip2', title: tips[1], points: [], isCta: false, slideNum: 3, totalSlides: 5 },
       { label: 'tip3', title: tips[2], points: [], isCta: false, slideNum: 4, totalSlides: 5 },
-      // スライド4: CTA
+      // スライド4: CTA（コメント誘導強化）
       {
         label: 'cta',
         title: opts.ctaText || 'チャンネル登録で毎日tips！',
-        points: ['いいね & チャンネル登録お願いします', 'コメントで感想を教えてね！'],
+        points: [
+          'あなたはいくつできてる？👇コメントで教えて！',
+          '🔔 チャンネル登録で毎日キャリアtips！',
+        ],
         isCta: true,
         slideNum: 5,
         totalSlides: 5,
