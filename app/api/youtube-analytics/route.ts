@@ -4,11 +4,27 @@
 // schedule: "0 13 * * *" (JST 22:00 毎日)
 
 import { NextResponse } from 'next/server';
-import { getYouTubeToken } from '@/lib/youtube';
 import { notifyDiscord } from '@/lib/gemini';
 
 const CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID || 'UCGZeUqxlF_8W0uzrz5ZyRpw';
 const ANALYTICS_BASE = 'https://youtubeanalytics.googleapis.com/v2/reports';
+
+// Analytics専用トークン（YOUTUBE_REFRESH_TOKEN_ANALYTICS を使用）
+async function getAnalyticsToken(): Promise<string> {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     process.env.YOUTUBE_CLIENT_ID || '',
+      client_secret: process.env.YOUTUBE_CLIENT_SECRET || '',
+      refresh_token: process.env.YOUTUBE_REFRESH_TOKEN_ANALYTICS || process.env.YOUTUBE_REFRESH_TOKEN || '',
+      grant_type:    'refresh_token',
+    }),
+  });
+  const data = await res.json() as { access_token?: string };
+  if (!data.access_token) throw new Error('Analytics token refresh failed');
+  return data.access_token;
+}
 
 interface HourlyRow { hour: number; views: number; estimatedMinutesWatched: number; }
 interface DayRow    { day: string; views: number; }
@@ -20,7 +36,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const token = await getYouTubeToken();
+    const token = await getAnalyticsToken();
 
     // 過去90日の範囲
     const endDate   = new Date().toISOString().split('T')[0];
