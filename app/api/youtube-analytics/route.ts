@@ -21,8 +21,13 @@ async function getAnalyticsToken(): Promise<string> {
       grant_type:    'refresh_token',
     }),
   });
-  const data = await res.json() as { access_token?: string };
-  if (!data.access_token) throw new Error('Analytics token refresh failed');
+  const data = await res.json() as { access_token?: string; error?: string; error_description?: string };
+  if (!data.access_token) {
+    const reason = data.error === 'invalid_grant'
+      ? 'refresh_token失効 (invalid_grant) → YouTube Analytics の再認証が必要です。/api/check-analytics-scope を参照。'
+      : `token refresh失敗: ${data.error || 'unknown'} - ${data.error_description || ''}`;
+    throw new Error(`Analytics token refresh failed: ${reason}`);
+  }
   return data.access_token;
 }
 
