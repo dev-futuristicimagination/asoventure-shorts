@@ -371,7 +371,9 @@ export async function generateBackgroundImage(category: string): Promise<string 
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
-  const prompt = IMAGEN_PROMPTS[category] || IMAGEN_PROMPTS.job;
+  const prompt = IMAGEN_PROMPTS[category] ?? IMAGEN_PROMPTS.job;
+  // カテゴリとプロンプト先頭を必ずログ出力（混線検知用）
+  console.log('[Imagen] category=' + category + ' prompt=' + prompt.slice(0, 60));
 
   try {
     const res = await fetch(
@@ -383,9 +385,10 @@ export async function generateBackgroundImage(category: string): Promise<string 
           instances: [{ prompt }],
           parameters: {
             sampleCount: 1,
-            aspectRatio: '9:16',  // Shorts縦型
+            aspectRatio: '9:16',
             safetyFilterLevel: 'block_some',
             personGeneration: 'allow_adult',
+            seed: Math.floor(Math.random() * 2147483647), // ← キャッシュ防止・毎回違う画像
           },
         }),
       }
@@ -403,17 +406,16 @@ export async function generateBackgroundImage(category: string): Promise<string 
 
     const pred = json.predictions?.[0];
     if (!pred?.bytesBase64Encoded) {
-      console.warn('[Imagen] no image in response');
+      console.warn('[Imagen] no image in response category=' + category);
       return null;
     }
 
     const mime = pred.mimeType || 'image/png';
-    const dataUri = `data:${mime};base64,${pred.bytesBase64Encoded}`;
-    console.log('[Imagen] 背景生成成功 category=' + category + ' mime=' + mime);
-    return dataUri;
+    console.log('[Imagen] 生成完了 category=' + category + ' mime=' + mime + ' size=' + pred.bytesBase64Encoded.length);
+    return `data:${mime};base64,${pred.bytesBase64Encoded}`;
 
   } catch (e) {
-    console.warn('[Imagen] failed:', e instanceof Error ? e.message : String(e));
+    console.warn('[Imagen] failed category=' + category + ':', e instanceof Error ? e.message : String(e));
     return null;
   }
 }
