@@ -192,28 +192,26 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     const nSlides  = slides.length; // 5
     const zoomFrames = SLIDE_DURATION * 30; // 90フレーム/スライド
 
-    // パーティクル（軽量版: 4個）
-    const pParams = [
-      { baseX: 540, baseY: 300,  ampX: 100, ampY: 80,  pX: 7,  pY: 9,  ph: 0,   size: 28, alpha: 0.07 },
-      { baseX: 200, baseY: 900,  ampX: 80,  ampY: 60,  pX: 5,  pY: 11, ph: 1.5, size: 20, alpha: 0.06 },
-      { baseX: 870, baseY: 600,  ampX: 70,  ampY: 100, pX: 9,  pY: 6,  ph: 3.0, size: 24, alpha: 0.06 },
-      { baseX: 400, baseY: 1500, ampX: 90,  ampY: 50,  pX: 8,  pY: 7,  ph: 2.0, size: 18, alpha: 0.05 },
-    ];
-
+    // -- VIDEO FILTER: concat (xfade -> concat to avoid frame rate issues) --
     const filterParts: string[] = [];
-
-    // ── 映像フィルター: 各スライド ──────────────────────────────────────────
     for (let i = 0; i < nSlides; i++) {
-      // zoompan（交互にIN/OUT）
+      // Scale + zoompan + fps 強制（concatに必要）
       const zoomDir = i % 2 === 0
         ? `z='min(zoom+0.00044,1.13)'`
         : `z='if(eq(on,1),1.13,max(zoom-0.00044,1.0))'`;
-        `[${i}:v]loop=loop=-1:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1,fps=fps=30[z${i}]`
-        `[${i}:v]loop=loop=-1:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1[z${i}]`
+      // pal8 -> yuv420p 変換も追加してフォーマット統一
+      filterParts.push(
+        `[${i}:v]loop=loop=-1:size=1:start=0,format=yuv420p,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1[z${i}]`
       );
-      // パーティクル（固定位置・スライドごとにオフセット - drawboxはt変数非対応）
+      // パーティクル（固定座標 - drawboxはt変数非対応）
       let prev = `z${i}`;
       const slideOffset = i * 137;
+      const pParams = [
+        { baseX: 540, baseY: 300,  ampX: 100, ampY: 80,  size: 28, alpha: 0.07 },
+        { baseX: 200, baseY: 900,  ampX: 80,  ampY: 60,  size: 20, alpha: 0.06 },
+        { baseX: 870, baseY: 600,  ampX: 70,  ampY: 100, size: 24, alpha: 0.06 },
+        { baseX: 400, baseY: 1500, ampX: 90,  ampY: 50,  size: 18, alpha: 0.05 },
+      ];
       pParams.forEach((p, pi) => {
         const cur = `s${i}p${pi}`;
         const px = Math.round((p.baseX + slideOffset * p.ampX / 100) % 1080);
@@ -223,25 +221,16 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         );
         prev = cur;
       });
-      filterParts.push(
-        `[${prev}]trim=0:${SLIDE_DURATION},setpts=PTS-STARTPTS[slide${i}]`
-      );
+      // trim して3秒に切り出し
+      filterParts.push(`[${prev}]trim=0:${SLIDE_DURATION},setpts=PTS-STARTPTS[slide${i}]`);
     }
 
-    // xfade で5スライドを繋ぐ
-    let xfadeIn = 'slide0';
-    for (let i = 1; i < nSlides; i++) {
-      const offset = (i * SLIDE_DURATION) - (i * FADE_DURATION) - FADE_DURATION;
-      const out = i === nSlides - 1 ? 'xout' : `xf${i}`;
-      filterParts.push(
-        `[${xfadeIn}][slide${i}]xfade=transition=fade:duration=${FADE_DURATION}:offset=${offset.toFixed(2)}[${out}]`
-      );
-      xfadeIn = out;
-    }
-
-    // 最終フェードアウト
+    // concat で5スライドを結合（xfadeの代わり - frame rate問題なし）
+    const slideInputs = Array.from({length: nSlides}, (_, i) => `[slide${i}]`).join("");
+    filterParts.push(`${slideInputs}concat=n=${nSlides}:v=1:a=0[concatv]`);
+    // フェードアウト
     const totalDur = VIDEO_DURATION;
-    filterParts.push(`[xout]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
+    filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
 
     // ── 音声フィルター: BGM + SE + TTS ────────────────────────────────────
     // TTS有効時: TTS音声を前面に出し BGM は環境音として後退
