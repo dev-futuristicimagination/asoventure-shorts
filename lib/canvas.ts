@@ -1,4 +1,4 @@
-﻿// lib/canvas.ts — Canvas動画生成 v12「SE付き5スライドカット切り替え版」
+// lib/canvas.ts — Canvas動画生成 v12「SE付き5スライドカット切り替え版」
 // 【プロデューサー改訂 2026-05-11 v12】
 //   v11からの変更点:
 //   - カット切り替え時にSE（ポン音）を追加 → ループ感・メリハリ向上
@@ -14,6 +14,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { generateFrame } from './frame-generator';
 import { generateTTS } from './gemini';
+import { splitNarrationToChunks, buildSubtitleFilters } from './subtitle';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ffmpegPath: string = require('ffmpeg-static') as string;
@@ -228,9 +229,23 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     // concat で5スライドを結合（xfadeの代わり - frame rate問題なし）
     const slideInputs = Array.from({length: nSlides}, (_, i) => `[slide${i}]`).join("");
     filterParts.push(`${slideInputs}concat=n=${nSlides}:v=1:a=0[concatv]`);
-    // フェードアウト
+    // 字幕（TTS有効時のみ）+ フェードアウト
     const totalDur = VIDEO_DURATION;
-    filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
+    if (opts.enableTTS && opts.narration) {
+      // ナレーションをスライドに分割して字幕フィルターを生成
+      const narChunks = splitNarrationToChunks(opts.narration, nSlides);
+      const subFilters = buildSubtitleFilters(narChunks, SLIDE_DURATION, totalDur);
+      if (subFilters.length > 0) {
+        // 字幕drawtext を comma 結合して concatv に適用
+        const subtitleChain = subFilters.join(',');
+        filterParts.push(`[concatv]${subtitleChain},fade=t=out:st=${totalDur - 1}:d=1[vid]`);
+        console.log(`[Canvas] 字幕フィルター ${subFilters.length}個追加`);
+      } else {
+        filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
+      }
+    } else {
+      filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
+    }
 
     // ── 音声フィルター: BGM + SE + TTS ────────────────────────────────────
     // TTS有効時: TTS音声を前面に出し BGM は環境音として後退
