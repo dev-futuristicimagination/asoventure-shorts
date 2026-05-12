@@ -219,31 +219,55 @@ export async function addToPlaylist(
 }
 
 // ─── 最適投稿時刻計算（予約投稿）────────────────────────────────────────
-// 【2026-05-11 修正】YouTube Shorts は 07:00/19:00 JST が最高エンゲージメント
-// Cron がいつ実行されても、次の最適時刻に予約投稿する
+// 【2026-05-12 更新】YouTube Analytics 実データから最適時刻を取得
+// analytics-optimal-time.json がある場合はそのJST時刻を使用
+// なければデフォルト: 7:00 / 19:00 JST
 // ⚠️ YouTube API 仕様: publishAt 使用時は privacyStatus:'private' が必須
-function getNextOptimalPublishTime(): string {
-  const nowUTC = Date.now();
 
-  // JST の今日 00:00 を UTC ミリ秒で計算（+9h して日付を揃え、-9h で UTC に戻す）
+let _analyticsOptimalHour: number | null = null;
+async function fetchOptimalPublishHour(): Promise<number> {
+  if (_analyticsOptimalHour !== null) return _analyticsOptimalHour;
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/dev-futuristicimagination/asoventure-shorts/main/lib/analytics-optimal-time.json'
+    );
+    if (res.ok) {
+      const data = await res.json() as { recommendation?: { publishJstHour?: number } };
+      const h = data.recommendation?.publishJstHour;
+      if (typeof h === 'number' && h >= 0 && h <= 23) {
+        _analyticsOptimalHour = h;
+        console.log('[PublishTime] Analytics実データ使用: JST ' + h + ':00');
+        return h;
+      }
+    }
+  } catch { /* フォールバックへ */ }
+  _analyticsOptimalHour = 19; // デフォルト
+  return 19;
+}
+
+async function getNextOptimalPublishTime(): Promise<string> {
+  const nowUTC = Date.now();
   const nowJSTDate = new Date(nowUTC + 9 * 60 * 60 * 1000);
   const jstMidnight = Date.UTC(
     nowJSTDate.getUTCFullYear(),
     nowJSTDate.getUTCMonth(),
     nowJSTDate.getUTCDate()
-  ) - 9 * 60 * 60 * 1000; // JST 00:00 の UTC ミリ秒
+  ) - 9 * 60 * 60 * 1000;
 
-  // 7:00 / 19:00 JST を UTC ミリ秒で表現
-  const today7am  = jstMidnight + 7  * 3600 * 1000;
-  const today7pm  = jstMidnight + 19 * 3600 * 1000;
-  const tomorrow7am = jstMidnight + 31 * 3600 * 1000; // 翌日 7:00 JST
+  // Analytics実データから最適時刻取得（なければ19時）
+  const bestHour = await fetchOptimalPublishHour();
+  const secondHour = bestHour >= 12 ? 7 : 19; // 2番目の候補（午前なら19時、午後なら7時）
 
-  // 現在より15分以上先の最初の最適時刻を選ぶ
+  const todayBest      = jstMidnight + bestHour   * 3600 * 1000;
+  const todaySecond    = jstMidnight + secondHour  * 3600 * 1000;
+  const tomorrowBest   = jstMidnight + (bestHour + 24) * 3600 * 1000;
+
   const minPublishAt = nowUTC + 15 * 60 * 1000;
-  let target = tomorrow7am;
-  if (today7am  > minPublishAt) target = today7am;
-  else if (today7pm > minPublishAt) target = today7pm;
+  let target = tomorrowBest;
+  if (todayBest   > minPublishAt) target = todayBest;
+  else if (todaySecond > minPublishAt) target = todaySecond;
 
+  console.log('[PublishTime] 予約時刻: ' + new Date(target).toISOString() + ' (JST ' + bestHour + ':00)');
   return new Date(target).toISOString();
 }
 export async function uploadToYouTube(
@@ -267,7 +291,7 @@ export async function uploadToYouTube(
       // 予約時刻になると自動で公開される。'public' + publishAt の組み合わせは 400 エラー
       privacyStatus: 'private',
       selfDeclaredMadeForKids: false,
-      publishAt: getNextOptimalPublishTime(),
+      publishAt: await getNextOptimalPublishTime(),
     },
   };
   const form = new FormData();
