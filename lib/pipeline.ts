@@ -1,4 +1,4 @@
-﻿// lib/pipeline.ts — Phase A / Phase B 共通パイプライン + Canvas（テキスト動画）
+// lib/pipeline.ts — Phase A / Phase B 共通パイプライン + Canvas（テキスト動画）
 // ffmpeg-static を使用してVercel serverless環境でFFmpegを実行
 
 import { requestVeo3, pollAndDownloadVeo3 } from './veo3';
@@ -330,7 +330,7 @@ export async function phaseCanvas(
   category: string,
   item: CanvasItem,
   cta: CtaConfig,
-  enableTTS = false
+  enableTTS = true  // 全カテゴリでTTS+字幕同期を有効化（2026-05-12 producer版）
 ): Promise<{ ok: boolean; message: string; youtubeUrl?: string }> {
   try {
     // Canvas動画生成（FFmpegのみ・Veo3不要）
@@ -345,6 +345,7 @@ export async function phaseCanvas(
       hookTitle,
       points: item.points,
       narration: generated.narration || item.narration,
+      narrationPerSlide: generated.narrationPerSlide, // ← 字幕完全同期（全カテゴリ対応）
       siteUrl: item.siteUrl,
       fullUrl: item.fullUrl,
       ctaText: item.ctaText,
