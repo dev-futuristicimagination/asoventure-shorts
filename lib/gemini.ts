@@ -364,6 +364,7 @@ const IMAGEN_PROMPTS: Record<string, string> = {
   japan:     'traditional japanese temple torii gate, fog, sakura petals, cinematic, 9:16 portrait',
   music1963: 'vintage vinyl record player, warm amber glow, retro nostalgia, 1960s aesthetic, cinematic 9:16',
   retro:     'retro pixel game controller glowing, dark background, nostalgia 80s vibes, cinematic 9:16',
+  station:   'bright university campus cherry blossom spring, students walking, hope and new beginning, morning light, cinematic 9:16 portrait',
 };
 
 export async function generateBackgroundImage(category: string): Promise<string | null> {
