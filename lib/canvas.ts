@@ -172,10 +172,18 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         : Promise.resolve(null),
     ]);
     let ttsPath: string | null = null;
+    let ttsPath: string | null = null;
+    let ttsFormatArgs: string[] = []; // FFmpeg format flags for TTS input
     if (ttsResult) {
-      ttsPath = join(tmpDir, "tts.wav");
+      // フォーマットに応じた拡張子でファイル保存
+      const ext = ttsResult.fileExt || "pcm";
+      ttsPath = join(tmpDir, "tts." + ext);
       await writeFile(ttsPath, ttsResult.audioBuffer);
-      console.log("[Canvas v12] TTS saved: " + ttsResult.audioBuffer.length + "B dur=" + ttsResult.durationEstimate.toFixed(1) + "s");
+      // PCM (raw L16) の場合はFFmpegにフォーマットを明示して渡す
+      if (ext === "pcm") {
+        ttsFormatArgs = ["-f", "s16le", "-ar", String(ttsResult.sampleRate || 24000), "-ac", "1"];
+      }
+      console.log("[Canvas v12] TTS saved ext=" + ext + " " + ttsResult.audioBuffer.length + "B dur=" + ttsResult.durationEstimate.toFixed(1) + "s");
     } else if (opts.enableTTS) {
       console.log("[Canvas v12] TTS failed/skip -> BGM only");
     }
@@ -287,9 +295,9 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       '-f', 'lavfi',
       '-i', `sine=frequency=880:sample_rate=44100:duration=${totalDur}`
     );
-    // TTS音声（生成できた場合のみ追加）
+    // TTS音声（フォーマット引数付きで追加）
     if (ttsPath) {
-      ffmpegArgs.push('-i', ttsPath);
+      ffmpegArgs.push(...ttsFormatArgs, '-i', ttsPath);
     }
 
     ffmpegArgs.push(

@@ -1,4 +1,4 @@
-﻿// lib/gemini.ts — 動的コンテンツ生成（Gemini 2.5 Flash）
+// lib/gemini.ts — 動的コンテンツ生成（Gemini 2.5 Flash）
 // 【2026-05-10 プロデューサー改訂v2】
 //  - health/finance からのCheese誘導を強化
 //  - A/Bテスト用タイトル2案を同時生成
@@ -243,7 +243,13 @@ const TTS_VOICE_MAP: Record<string, { voice: string; stylePrompt: string }> = {
   default:   { voice: 'Kore',   stylePrompt: 'q' },
 };
 
-export interface TTSResult { audioBuffer: Buffer; durationEstimate: number; }
+export interface TTSResult {
+  audioBuffer: Buffer;      // raw audio data
+  durationEstimate: number; // 秒
+  mimeType: string;         // 実際のMIMEタイプ（例: audio/L16;rate=24000）
+  fileExt: string;          // 保存拡張子（pcm / mp3 / wav）
+  sampleRate: number;       // サンプルレート
+}
 
 // GeminiTTS が返す raw PCM (Linear16, 24kHz, mono) に WAV ヘッダーを付与する
 function pcmToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16): Buffer {
@@ -302,12 +308,26 @@ export async function generateTTS(narration: string, category: string): Promise<
     const inlineData = json.candidates?.[0]?.content?.parts?.[0]?.inlineData;
     if (!inlineData?.data) { console.warn('[TTS] no audio data in response'); return null; }
 
-    const rawPcm = Buffer.from(inlineData.data, 'base64');
-    // Gemini TTS は raw PCM (L16, 24kHz, mono) を返すためWAVヘッダーを付与
-    const wavBuffer = pcmToWav(rawPcm, 24000, 1, 16);
-    const durationEstimate = Math.min(rawPcm.length / (24000 * 2), 14); // L16=2bytes/sample
-    console.log(`[TTS] ok voice=${voice} pcm=${rawPcm.length}B wav=${wavBuffer.length}B dur=${durationEstimate.toFixed(1)}s`);
-    return { audioBuffer: wavBuffer, durationEstimate };
+    const rawBuf = Buffer.from(inlineData.data, 'base64');
+    const mimeType = inlineData.mimeType || 'audio/L16;rate=24000';
+    console.log('[TTS] mimeType=' + mimeType + ' size=' + rawBuf.length + 'B voice=' + voice);
+
+    // mimeType からサンプルレートとファイル拡張子を判定
+    let sampleRate = 24000;
+    let fileExt = 'pcm';
+    const rateMatch = mimeType.match(/rate=(\d+)/);
+    if (rateMatch) sampleRate = parseInt(rateMatch[1]);
+    if (mimeType.includes('mpeg') || mimeType.includes('mp3')) fileExt = 'mp3';
+    else if (mimeType.includes('wav') || mimeType.includes('wave')) fileExt = 'wav';
+    else fileExt = 'pcm'; // audio/L16 = raw PCM
+
+    // duration: PCMの場合はバイト数から計算、MP3/WAVは推定
+    const durationEstimate = fileExt === 'pcm'
+      ? Math.min(rawBuf.length / (sampleRate * 2), 14) // L16=2bytes/sample
+      : Math.min(rawBuf.length / 16000, 14);            // MP3の大まかな推定
+
+    console.log('[TTS] ok ext=' + fileExt + ' sampleRate=' + sampleRate + ' dur=' + durationEstimate.toFixed(1) + 's');
+    return { audioBuffer: rawBuf, durationEstimate, mimeType, fileExt, sampleRate };
   } catch (e) {
     console.warn('[TTS] failed → BGM only:', e instanceof Error ? e.message : String(e));
     return null;
