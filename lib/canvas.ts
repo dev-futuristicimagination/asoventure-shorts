@@ -50,7 +50,8 @@ export interface CanvasOptions {
   title: string;
   hookTitle?: string;   // 疑問文フック（スライド1専用）
   points: string[];
-  narration: string;
+  narration: string;            // TTS入力用ナレーション全文
+  narrationPerSlide?: string[]; // スライド別字幕テキスト（完全同期用）
   siteUrl: string;
   fullUrl: string;
   ctaText: string;
@@ -90,12 +91,22 @@ async function pickBgFromLibrary(category: string, bgImageUrl?: string): Promise
 }
 
 const VIDEO_DURATION = 15; // 秒固定（YouTube Shorts）
-const SLIDE_DURATION = 3;   // スライド1枚 = 3秒
-const FADE_DURATION  = 0.3; // スライド間クロスフェード
+// SLIDE_DURATION は字幕同期のため動的に計算する（デフォルト値）
+const DEFAULT_SLIDE_DURATION = 3;   // スライド1枚 = 3秒（narrationPerSlideなし時）
+// ナレーション文字数比例でスライド時間を計算
+function calcSlideDurations(narrationPerSlide: string[], totalDur: number): number[] {
+  const lens = narrationPerSlide.map(s => Math.max(s.trim().length, 1));
+  const total = lens.reduce((s, v) => s + v, 0);
+  // 各スライドの時間を文字数比例で割り振り（最短2秒保証）
+  const raw = lens.map(l => (l / total) * totalDur);
+  const minDur = 2.0;
+  // 最短制約後に全体を再ノーマライズ
+  const clamped = raw.map(d => Math.max(d, minDur));
+  const clampedTotal = clamped.reduce((s, v) => s + v, 0);
+  const scale = totalDur / clampedTotal;
+  return clamped.map(d => Math.round(d * scale * 10) / 10);
+}
 
-// SE: xfade切り替え時のタイミング（秒）
-// スライド0→1: 3-0.3=2.7s, 1→2: 5.7s, 2→3: 8.4s, 3→4: 11.1s
-const SE_TIMES: number[] = [2.7, 5.7, 8.4, 11.1];
 
 // ── Canvas動画生成 v12 ────────────────────────────────────────────────────
 export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> {
@@ -140,10 +151,32 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       },
     ];
 
-    // 字幕テキストを事前に分割（TTS有効時）
-    const narChunks = (opts.enableTTS && opts.narration)
-      ? splitNarrationToChunks(opts.narration, slides.length)
-      : [];
+    // ── 字幕テキストの決定（優先順位: narrationPerSlide > 文字数分割 > なし）
+    const subtitleChunks: string[] = (() => {
+      if (!opts.enableTTS) return Array(slides.length).fill('');
+      // コンテンツ生成側からスライド別ナレーションが来ている場合（完全同期）
+      if (opts.narrationPerSlide && opts.narrationPerSlide.length === slides.length) {
+        console.log('[Canvas] narrationPerSlide を字幕に使用（完全同期モード）');
+        return opts.narrationPerSlide;
+      }
+      // フォールバック: ナレーション全文を文字数比例で分割
+      if (opts.narration) {
+        console.log('[Canvas] narration を文字数比例分割して字幕に使用');
+        return splitNarrationToChunks(opts.narration, slides.length);
+      }
+      return Array(slides.length).fill('');
+    })();
+
+    // ── スライド表示時間: narrationPerSlide がある場合は文字数比例で調整
+    const slideDurs: number[] = (() => {
+      const hasPerSlide = opts.enableTTS && subtitleChunks.some(s => s.trim().length > 0);
+      if (hasPerSlide) {
+        const durs = calcSlideDurations(subtitleChunks, VIDEO_DURATION);
+        console.log('[Canvas] 比例スライド時間: ' + durs.join('s, ') + 's');
+        return durs;
+      }
+      return Array(slides.length).fill(DEFAULT_SLIDE_DURATION);
+    })();
 
     const framePaths: string[] = [];
     for (let si = 0; si < slides.length; si++) {
@@ -157,11 +190,12 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         bgImageUrl: bgSource,
         slideNum: slide.slideNum,
         totalSlides: slide.totalSlides,
-        subtitleText: narChunks[si] || undefined,  // 字幕テキストをフレームに埋め込む
+        subtitleText: subtitleChunks[si] || undefined,
       });
       const p = join(tmpDir, `frame_${slide.label}.png`);
       await writeFile(p, png);
       framePaths.push(p);
+
     }
     console.log(`[Canvas v12] ${slides.length}枚のフレーム生成完了`);
 
@@ -195,10 +229,17 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       console.log("[Canvas v12] TTS failed/skip -> BGM only");
     }
 
-    // ── STEP 3: FFmpeg 5スライド xfade + SE 動画生成 ────────────────────────
+    // ── STEP 3: FFmpeg 5スライド concat + SE 動画生成 ────────────────────────
     const outPath  = join(tmpDir, 'canvas.mp4');
     const nSlides  = slides.length; // 5
-    const zoomFrames = SLIDE_DURATION * 30; // 90フレーム/スライド
+    // SEタイミングを累積スライド時間から動的計算
+    const seCumulative: number[] = [];
+    let cumT = 0;
+    for (let i = 0; i < nSlides - 1; i++) {
+      cumT += slideDurs[i];
+      seCumulative.push(Math.max(0, cumT - 0.3)); // 切り替え0.3秒前
+    }
+    console.log('[Canvas] SE timing: ' + seCumulative.join('s, ') + 's');
 
     // -- VIDEO FILTER: concat (xfade -> concat to avoid frame rate issues) --
     const filterParts: string[] = [];
@@ -208,6 +249,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         ? `z='min(zoom+0.00044,1.13)'`
         : `z='if(eq(on,1),1.13,max(zoom-0.00044,1.0))'`;
       // pal8 -> yuv420p 変換も追加してフォーマット統一
+      const zoomFrames = Math.round(slideDurs[i] * 30); // スライド時間に応じたzoompanフレーム数
       filterParts.push(
         `[${i}:v]loop=loop=-1:size=1:start=0,format=yuv420p,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=${zoomDir}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${zoomFrames}:s=1080x1920:fps=30,setsar=1[z${i}]`
       );
@@ -229,8 +271,8 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         );
         prev = cur;
       });
-      // trim して3秒に切り出し
-      filterParts.push(`[${prev}]trim=0:${SLIDE_DURATION},setpts=PTS-STARTPTS[slide${i}]`);
+      // 各スライドの長さでtrim（比例配分）
+      filterParts.push(`[${prev}]trim=0:${slideDurs[i].toFixed(1)},setpts=PTS-STARTPTS[slide${i}]`);
     }
 
     // concat で5スライドを結合（xfadeの代わり - frame rate問題なし）
@@ -253,8 +295,8 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         // TTS: 先頭から再生・音量-8dB（自然なナレーション音量）
         `[${ttsIdx}:a]volume=-8dB,afade=t=in:st=0:d=0.5,atrim=0:${totalDur},asetpts=PTS-STARTPTS[tts]`
       );
-      // SE生成
-      SE_TIMES.forEach((t, idx) => {
+      // SE生成（比例タイミング）
+      seCumulative.forEach((t, idx) => {
         const label = `se${idx}`;
         const delayMs = Math.round(t * 1000);
         filterParts.push(
@@ -268,7 +310,7 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     } else {
       // BGM + SE のみ（TTS無効 or 失敗時）
       filterParts.push(`[${nSlides}:a]volume=-18dB,afade=t=out:st=${totalDur - 1.5}:d=1.5[bgm]`);
-      SE_TIMES.forEach((t, idx) => {
+      seCumulative.forEach((t, idx) => {
         const label = `se${idx}`;
         const delayMs = Math.round(t * 1000);
         filterParts.push(
