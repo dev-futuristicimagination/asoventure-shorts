@@ -172,7 +172,6 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
         : Promise.resolve(null),
     ]);
     let ttsPath: string | null = null;
-    let ttsPath: string | null = null;
     let ttsFormatArgs: string[] = []; // FFmpeg format flags for TTS input
     if (ttsResult) {
       // フォーマットに応じた拡張子でファイル保存
