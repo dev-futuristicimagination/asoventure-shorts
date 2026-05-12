@@ -140,17 +140,24 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
       },
     ];
 
+    // 字幕テキストを事前に分割（TTS有効時）
+    const narChunks = (opts.enableTTS && opts.narration)
+      ? splitNarrationToChunks(opts.narration, slides.length)
+      : [];
+
     const framePaths: string[] = [];
-    for (const slide of slides) {
+    for (let si = 0; si < slides.length; si++) {
+      const slide = slides[si];
       const png = await generateFrame({
         category: opts.category,
         title: slide.title,
         points: slide.points,
         siteUrl: opts.siteUrl,
         ctaText: slide.isCta ? (opts.ctaText || '') : '',
-        bgImageUrl: bgSource,  // ← bg-library から取得したData URI
+        bgImageUrl: bgSource,
         slideNum: slide.slideNum,
         totalSlides: slide.totalSlides,
+        subtitleText: narChunks[si] || undefined,  // 字幕テキストをフレームに埋め込む
       });
       const p = join(tmpDir, `frame_${slide.label}.png`);
       await writeFile(p, png);
@@ -229,23 +236,9 @@ export async function generateCanvasVideo(opts: CanvasOptions): Promise<Buffer> 
     // concat で5スライドを結合（xfadeの代わり - frame rate問題なし）
     const slideInputs = Array.from({length: nSlides}, (_, i) => `[slide${i}]`).join("");
     filterParts.push(`${slideInputs}concat=n=${nSlides}:v=1:a=0[concatv]`);
-    // 字幕（TTS有効時のみ）+ フェードアウト
+    // フェードアウト（字幕はフレーム内に埋め込み済み）
     const totalDur = VIDEO_DURATION;
-    if (opts.enableTTS && opts.narration) {
-      // ナレーションをスライドに分割して字幕フィルターを生成
-      const narChunks = splitNarrationToChunks(opts.narration, nSlides);
-      const subFilters = buildSubtitleFilters(narChunks, SLIDE_DURATION, totalDur);
-      if (subFilters.length > 0) {
-        // 字幕drawtext を comma 結合して concatv に適用
-        const subtitleChain = subFilters.join(',');
-        filterParts.push(`[concatv]${subtitleChain},fade=t=out:st=${totalDur - 1}:d=1[vid]`);
-        console.log(`[Canvas] 字幕フィルター ${subFilters.length}個追加`);
-      } else {
-        filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
-      }
-    } else {
-      filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
-    }
+    filterParts.push(`[concatv]fade=t=out:st=${totalDur - 1}:d=1[vid]`);
 
     // ── 音声フィルター: BGM + SE + TTS ────────────────────────────────────
     // TTS有効時: TTS音声を前面に出し BGM は環境音として後退

@@ -1,4 +1,4 @@
-import satori from 'satori';
+﻿import satori from 'satori';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
@@ -92,6 +92,7 @@ export interface FrameOptions {
   bgImageUrl?: string;
   slideNum?: number;
   totalSlides?: number;
+  subtitleText?: string;  // カラオケ字幕テキスト（TTS有効時）
 }
 
 type SatoriChild = SatoriElement | string | null;
@@ -170,6 +171,28 @@ export async function generateFrame(opts: FrameOptions): Promise<Buffer> {
       div({ position: 'absolute', top: 0, left: 0, width: '10px', height: '1920px', backgroundColor: theme.accent }, ''),
       div({ position: 'absolute', top: 0, right: 0, width: '10px', height: '1920px', backgroundColor: `${theme.accent}60` }, ''),
 
+      // 字幕バー（subtitleText が指定された場合のみ表示）
+      ...(opts.subtitleText ? [
+        div({
+          position: "absolute",
+          bottom: "80px",
+          left: "0px",
+          width: "1080px",
+          backgroundColor: "rgba(0,0,0,0.75)",
+          padding: "20px 40px 24px 40px",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+        }, [
+          txt(e(opts.subtitleText), {
+            color: "#FFEE58",
+            fontSize: "44px",
+            fontWeight: "bold",
+            textAlign: "center",
+            lineHeight: 1.5,
+          }),
+        ]),
+      ] : []),
       // コンテンツレイヤー
       div({ position: 'absolute', top: 0, left: 0, width: '1080px', height: '1920px',
             flexDirection: 'column', padding: '60px 60px 60px 80px' }, [
