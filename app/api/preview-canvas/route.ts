@@ -92,6 +92,7 @@ export async function GET(req: Request) {
     let title = base.title;
     let narration = base.narration;
     let hookTitle: string | undefined;
+    let narrationPerSlide: string[] | undefined;
 
     // Gemini動的生成（オプション）
     if (useGemini) {
@@ -99,9 +100,10 @@ export async function GET(req: Request) {
       title = generated.title || base.title;
       narration = generated.narration || base.narration;
       hookTitle = generated.hookTitle;
+      narrationPerSlide = generated.narrationPerSlide; // スライド別ナレーション（完全同期用）
     }
 
-    console.log(`[Preview] category=${category} tts=${enableTTS} gemini=${useGemini}`);
+    console.log(`[Preview] category=${category} tts=${enableTTS} gemini=${useGemini} narrationPerSlide=${narrationPerSlide ? 'yes' : 'no'}`);
     const startTime = Date.now();
 
     const videoBuffer = await generateCanvasVideo({
@@ -110,6 +112,7 @@ export async function GET(req: Request) {
       hookTitle,
       points: base.points,
       narration,
+      narrationPerSlide, // 字幕完全同期用
       siteUrl: base.siteUrl,
       fullUrl: base.fullUrl,
       ctaText: base.ctaText,
