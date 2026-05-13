@@ -294,7 +294,7 @@ export async function generateCanvasItemFromArticle(
   const baseUrl = CATEGORY_SITE_MAP[category] || 'https://job.asoventure.jp';
 
   return {
-    topic: article.title,
+    topic: (() => { try { return decodeURIComponent(article.title); } catch { return article.title; } })(),
     title: parsed.title,
     narration: parsed.narration,
     points: parsed.points,
