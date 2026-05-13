@@ -76,7 +76,7 @@ function parseSitemapUrls(xml: string, baseUrl: string, limit = 5): string[] {
   while ((match = locPattern.exec(xml)) !== null && urls.length < limit * 3) {
     const url = match[1].trim();
     // カテゴリページ・タグページ・トップページは除外
-    const isArticle = !url.match(/\/(tag|category|tags|categories|page|search|about|contact|privacy|sitemap)\/?(\?.*)?$/)
+    const isArticle = !url.match(/\/(tag|category|author|tags|categories|page|search|about|contact|privacy|sitemap)(\/.*)?(\?.*)?$/)
       && url !== baseUrl + '/'
       && url !== baseUrl;
     if (isArticle) urls.push(url);
